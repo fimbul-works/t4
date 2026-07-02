@@ -1,0 +1,47 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "outputs": [
+    {
+      "name": "markdown",
+      "path": "./docs"
+    }
+  ],
+  "plugin": ["typedoc-plugin-markdown"],
+
+  // Prevent commit hash documentation
+  "gitRevision": "main",
+
+  // This is the critical setting to stop the single-file behavior
+  "outputFileStrategy": "modules",
+
+  // This ensures your @module tags in index.ts are treated as the top-level
+  "useCodeBlocks": true,
+  "expandObjects": true,
+
+  // Navigation settings for the new version of the plugin
+  "navigationModel": {
+    "excludeGroups": false,
+    "excludeCategories": false
+  },
+
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true,
+    "includeFolders": true
+  },
+
+  // This cleans up the file names (prevents README/modules/moduleName.md)
+  "flattenOutputFiles": true,
+  "hidePageTitle": false,
+  "hideBreadcrumbs": false,
+  "hidePageHeader": true,
+
+  "readme": "none",
+  "cleanOutputDir": true,
+  "indexFormat": "table",
+  "parametersFormat": "table",
+  "interfacePropertiesFormat": "table",
+  "classPropertiesFormat": "table",
+  "typeDeclarationFormat": "table"
+}

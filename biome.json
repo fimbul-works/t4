@@ -1,0 +1,18 @@
+{
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120,
+    "lineEnding": "lf"
+  },
+  "linter": {
+    "rules": {
+      "suspicious": {
+        "noAssignInExpressions": "off"
+      },
+      "style": {
+        "useSingleVarDeclarator": "off"
+      }
+    }
+  }
+}
