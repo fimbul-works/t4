@@ -23,6 +23,19 @@ const BASE_FACES: [ArrayVector3D, ArrayVector3D, ArrayVector3D][] = [
   [v1, v3, v2], // Face 3
 ];
 
+// Outward unit normals of each base face. For a regular tetrahedron
+// centered at the origin, each face's outward normal points opposite
+// to its missing vertex, and is already unit-length because the four
+// vertices lie on the unit sphere. Used to find which face a ray exits
+// through in O(4) dot products instead of four ray-plane + barycentric
+// solves.
+const FACE_NORMALS: ArrayVector3D[] = [
+  [-v3[0], -v3[1], -v3[2]], // Face 0 (v0,v1,v2) — opposite v3
+  [-v1[0], -v1[1], -v1[2]], // Face 1 (v0,v2,v3) — opposite v1
+  [-v2[0], -v2[1], -v2[2]], // Face 2 (v0,v3,v1) — opposite v2
+  [-v0[0], -v0[1], -v0[2]], // Face 3 (v1,v3,v2) — opposite v0
+];
+
 export interface T4Options {
   radiusKm?: number;
   applyEarthCurvature?: boolean;
@@ -44,8 +57,26 @@ export interface T4Object {
   readonly childIds: [bigint, bigint, bigint, bigint];
 }
 
-// Instance cache to reuse T4Object instances (using WeakRefs to prevent leaks)
-const instanceCache = new Map<bigint, WeakRef<T4Object>>();
+// Instance cache to reuse T4Object instances (using WeakRefs to prevent leaks).
+// Keyed by id + options so Earth and Mars variants of the same cell don't
+// evict each other: a cache miss for one radius must not overwrite a live
+// entry for another. The FinalizationRegistry below drops the entry once the
+// cached object is garbage-collected, so the map can't grow unbounded in
+// long-running processes indexing many distinct cells.
+const instanceCache = new Map<string, WeakRef<T4Object>>();
+
+// Deletes cache entries once their T4Object is GC'd. The token captured at
+// registration is the composite cache key, so we can remove the exact entry
+// without holding a reference to the object (which would defeat the WeakRef).
+const cacheFinalizer = new FinalizationRegistry((key: string) => {
+  const ref = instanceCache.get(key);
+  // Only delete if the entry hasn't already been reused for a newer object.
+  if (ref && !ref.deref()) instanceCache.delete(key);
+});
+
+function cacheKeyFor(id: bigint, radiusKm: number, applyEarthCurvature: boolean): string {
+  return `${id}|${radiusKm}|${applyEarthCurvature}`;
+}
 
 /**
  * Creates a T4 BigInt ID from base face, subdivision path, and zoom level.
@@ -307,11 +338,17 @@ function getBarycentric(Q: ArrayVector3D, A: ArrayVector3D, B: ArrayVector3D, C:
 }
 
 /**
- * Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
+ * Finds the base face that contains the projection of P onto the tetrahedron,
+ * returning the face index and the barycentric coordinates of P within it.
+ *
+ * The common case exits early: the first face whose minimum barycentric
+ * coordinate is >= 0 means the point projects strictly inside it, so the
+ * remaining faces are skipped (O(1) face instead of O(4)). Points exactly on
+ * a face edge or vertex (a tie) won't satisfy the early condition for any
+ * face, so the loop falls back to selecting the max-score face across all 4,
+ * matching the original tie-breaking behavior.
  */
-export function cartesianToT4(P: ArrayVector3D, zoom: number): bigint {
-  if (zoom < 0 || zoom > 28) throw new Error("Zoom must be between 0 and 28");
-
+function findBestFace(P: ArrayVector3D): { face: number; barycentric: ArrayVector3D } {
   let bestFace = -1;
   let bestScore = -Infinity;
   let bestBarycentric: ArrayVector3D = [0, 0, 0];
@@ -323,6 +360,10 @@ export function cartesianToT4(P: ArrayVector3D, zoom: number): bigint {
 
     const [u, v, w] = getBarycentric(Q, A, B, C);
     const score = Math.min(u, v, w);
+    // Early exit: point projects strictly inside this face.
+    if (score >= 0) {
+      return { face: i, barycentric: [u, v, w] };
+    }
     if (score > bestScore) {
       bestScore = score;
       bestFace = i;
@@ -333,6 +374,16 @@ export function cartesianToT4(P: ArrayVector3D, zoom: number): bigint {
   if (bestFace === -1) {
     throw new Error("Point could not be projected onto the tetrahedron");
   }
+  return { face: bestFace, barycentric: bestBarycentric };
+}
+
+/**
+ * Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
+ */
+export function cartesianToT4(P: ArrayVector3D, zoom: number): bigint {
+  if (zoom < 0 || zoom > 28) throw new Error("Zoom must be between 0 and 28");
+
+  const { face: bestFace, barycentric: bestBarycentric } = findBestFace(P);
 
   let [u, v, w] = bestBarycentric;
   const subdivisions: number[] = [];
@@ -365,12 +416,21 @@ export function latLngToT4(lat: number, lng: number, zoom: number, options?: T4O
   return cartesianToT4(P, zoom);
 }
 
-// Point across edge helper
+// Point across edge helper. Computes the midpoint of edge A-B, then nudges
+// it 1% of the way toward the opposite vertex C (i.e. away from the cell
+// center) so the resulting point lands inside the adjacent cell across that
+// edge. Inlined from vec helpers to avoid per-call allocations on the
+// neighbor hot path; math is identical to the original.
 function getPointAcrossEdge(A: ArrayVector3D, B: ArrayVector3D, C: ArrayVector3D): ArrayVector3D {
-  const center = divide3D(add3D(add3D(A, B), C), [3, 3, 3]);
-  const midpoint = divide3D(add3D(A, B), [2, 2, 2]);
-  const dir = subtract3D(midpoint, center);
-  return add3D(midpoint, multiply3D(dir, [0.01, 0.01, 0.01]));
+  // center = (A + B + C) / 3
+  const cx = (A[0] + B[0] + C[0]) / 3;
+  const cy = (A[1] + B[1] + C[1]) / 3;
+  const cz = (A[2] + B[2] + C[2]) / 3;
+  // midpoint = (A + B) / 2 ; dir = midpoint - center ; out = midpoint + 0.01 * dir
+  // Combined: out = midpoint + 0.01 * (midpoint - center) = 1.01*midpoint - 0.01*center
+  const m = 1.01 / 2; // 1.01 * (A+B)/2
+  const k = 0.01; // -0.01 * center
+  return [m * (A[0] + B[0]) - k * cx, m * (A[1] + B[1]) - k * cy, m * (A[2] + B[2]) - k * cz];
 }
 
 /**
@@ -409,19 +469,29 @@ export function createT4(
     id = createT4Id(baseFace, subdivisions, zoom);
   }
 
-  // Check cache first
-  const cachedRef = instanceCache.get(id);
+  // Check cache first. Keyed by id + options so variants with different
+  // radius/curvature coexist instead of evicting each other.
+  const key = cacheKeyFor(id, radiusKm, applyEarthCurvature);
+  const cachedRef = instanceCache.get(key);
   if (cachedRef) {
     const cached = cachedRef.deref();
-    if (cached && cached.radiusKm === radiusKm && cached.applyEarthCurvature === applyEarthCurvature) {
-      return cached;
-    }
+    if (cached) return cached;
   }
 
   const parsed = parseT4Id(id);
   if (!parsed.isValid) {
     throw new Error("Invalid T4 ID");
   }
+
+  // Lazily memoized flat vertices. Every geometry getter (vertices3D,
+  // center3D, vertices, center) starts from the same flat [A,B,C] computed
+  // by walking the subdivision path; computing it once and reusing avoids
+  // re-walking the path (z12 = 12 midpoint iterations) on each access.
+  let flatCached: [ArrayVector3D, ArrayVector3D, ArrayVector3D] | null = null;
+  const getFlat = (): [ArrayVector3D, ArrayVector3D, ArrayVector3D] => {
+    if (!flatCached) flatCached = getT4VerticesFlat(id);
+    return flatCached;
+  };
 
   const obj: T4Object = {
     get id() {
@@ -437,16 +507,32 @@ export function createT4(
       return applyEarthCurvature;
     },
     get vertices3D() {
-      return getT4Vertices3D(id, radiusKm);
+      const [A, B, C] = getFlat();
+      const scale: ArrayVector3D = [radiusKm, radiusKm, radiusKm];
+      return [
+        multiply3D(normalize3D(A), scale),
+        multiply3D(normalize3D(B), scale),
+        multiply3D(normalize3D(C), scale),
+      ] as [ArrayVector3D, ArrayVector3D, ArrayVector3D];
     },
     get center3D() {
-      return getT4Center3D(id, radiusKm);
+      const [A, B, C] = getFlat();
+      const center = divide3D(add3D(add3D(A, B), C), [3, 3, 3]);
+      const scale: ArrayVector3D = [radiusKm, radiusKm, radiusKm];
+      return multiply3D(normalize3D(center), scale);
     },
     get vertices() {
-      return getT4Vertices(id, { radiusKm, applyEarthCurvature });
+      const [A, B, C] = getFlat();
+      return [
+        geocentricToGeodetic(normalize3D(A), applyEarthCurvature),
+        geocentricToGeodetic(normalize3D(B), applyEarthCurvature),
+        geocentricToGeodetic(normalize3D(C), applyEarthCurvature),
+      ] as [ArrayVector2D, ArrayVector2D, ArrayVector2D];
     },
     get center() {
-      return getT4Center(id, { radiusKm, applyEarthCurvature });
+      const [A, B, C] = getFlat();
+      const center = divide3D(add3D(add3D(A, B), C), [3, 3, 3]);
+      return geocentricToGeodetic(normalize3D(center), applyEarthCurvature);
     },
     get parent() {
       const parentId = getParentT4Id(id);
@@ -478,6 +564,7 @@ export function createT4(
     },
   };
 
-  instanceCache.set(id, new WeakRef(obj));
+  instanceCache.set(key, new WeakRef(obj));
+  cacheFinalizer.register(obj, key);
   return obj;
 }
