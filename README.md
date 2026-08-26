@@ -1,8 +1,8 @@
 ![T4](./T4.png)
 
-**T4** is a hierarchical spatial indexing system for spheres, built on a recursively subdivided [tetrahedron](https://en.wikipedia.org/wiki/Tetrahedron) projected onto the sphere's surface. Every point on the sphere resolves to a compact BigInt ID that encodes its face, its subdivision path, and its zoom level — no lookup tables, no floating-point drift, just bit-packed geometry.
+**T4** is a hierarchical spatial indexing system for spheres, built on a recursively subdivided [tetrahedron](https://en.wikipedia.org/wiki/Tetrahedron) projected onto the sphere's surface. Every point on the sphere resolves to a compact `BigInt` ID that encodes its face, its subdivision path, and its zoom level — no lookup tables, no floating-point drift, just bit-packed geometry.
 
-It converts freely between GPS coordinates, geocentric Cartesian vectors, and T4 IDs, and lets you walk the resulting grid via parents, children, and edge-sharing neighbors.
+It converts freely between GPS coordinates, geocentric Cartesian vectors, and T4 IDs, and lets you walk the resulting grid via parents, children, and edge-sharing neighbors. **T4's hierarchy is strictly geometric**: every parent cell is exactly partitioned into four child cells, giving the index predictable multi-resolution containment without cross-resolution overlap.
 
 Whether you're building planetary datasets, game-world spatial partitioning, or a discrete global grid for geospatial queries, T4 gives you a compact, deterministic address for any point on any sphere.
 
@@ -27,7 +27,7 @@ Whether you're building planetary datasets, game-world spatial partitioning, or 
 ## Features
 
 - 🌐 Hierarchical spatial indexing on any sphere, not just Earth
-- 🧊 Compact BigInt IDs — face, subdivision path, and zoom packed into a single integer
+- 🧊 Compact `BigInt` IDs — face, subdivision path, and zoom packed into a single integer
 - 🔁 Bidirectional conversion between GPS, geocentric Cartesian, and T4 IDs
 - 🌳 Constant-time parent, children, and neighbor lookups via bit arithmetic
 - 🌍 Optional WGS84 Earth curvature correction, toggleable per call
@@ -66,15 +66,25 @@ console.log(cell.children);  // [T4Object, T4Object, T4Object, T4Object]
 
 ## Why T4?
 
-Unlike quadtree-on-cube or hexagon-based discrete global grids, T4 gives you:
-- **Simplicity** - a regular tetrahedron has just 4 faces and quadrisects cleanly, so every cell is a triangle and every subdivision is one of exactly 4 cases
-- **Compact addressing** - an entire cell's lineage (face, path, zoom) lives in one BigInt, cheap to store, compare, and sort
-- **Sphere-agnostic** - Earth curvature correction is optional, so the same grid works for perfect spheres: planets, moons, or procedurally generated worlds
-- **Predictable traversal** - parent/child/neighbor lookups are bit-shifts and small geometric solves, not table lookups
+T4 uses a different geometric model from hexagonal and cube-based global grids: a regular tetrahedron is recursively quadrisected after projection onto a sphere, producing a triangular hierarchy with strict 1→4 containment.
+
+### Geometric Model
+
+- **Strict 1→4 hierarchy** - Every parent triangle is exactly partitioned into four child triangles. A child's geometric footprint is fully contained within its parent, making multi-resolution aggregation and spatial hierarchy straightforward.
+- **Sphere-agnostic geometry** - T4 can operate on a perfect sphere or apply WGS84 Earth curvature correction. The same indexing system can therefore represent Earth, other planetary bodies, or arbitrary spherical game worlds.
+- **Triangular topology** - Every cell has exactly three edge-sharing neighbors, and the entire hierarchy derives from the topology of four tetrahedral base faces.
+
+### Compact Addressing
+
+- **Simplicity** - A regular tetrahedron has just 4 faces and quadrisects cleanly, so every cell is a triangle and every subdivision is one of exactly 4 cases.
+- **Compact addressing** - An entire cell's lineage (face, path, zoom) lives in one `BigInt`, cheap to store, compare, and sort.
+- **Predictable traversal** - Parent, child, descendant, and neighbor relationships can be resolved directly from the encoded topology rather than requiring spatial lookup tables.
 
 ## Performance Benchmarks (vs. Uber H3)
 
-T4 is optimized for maximum throughput, low memory overhead, and deterministic bit arithmetic. Below is a direct, head-to-head benchmark comparing **T4** against **Uber's H3** (`h3-js` v4.5.0) in Node.js across comparable resolution levels (continental down to sub-meter), measured over 1,000 iterations per level with 100 warmup cycles across 16 globally distributed coordinates:
+T4 is designed around compact bit-packed IDs and direct topological operations. The benchmark below compares the TypeScript implementation of T4 against Uber's `h3-js` v4.5.0 using Node.js.
+
+The benchmark covers hierarchical operations, spatial conversion, geometry, and topology rather than a single synthetic operation. Results are machine-dependent, so the included benchmark suite can be run locally with `pnpm benchmark:h3` or `pnpm benchmark`.
 
 | Operation | **T4** Avg Time | **T4** Ops/sec | **Uber H3** Avg Time | **Uber H3** Ops/sec | **T4 vs H3 Speedup** |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -88,7 +98,7 @@ T4 is optimized for maximum throughput, low memory overhead, and deterministic b
 | **`ID -> Centroid`** | **0.7085 µs** | **1,411,415** | 0.5072 µs | 1,971,543 | 0.72x |
 | **`latLng -> ID (warped)`** | **2.0080 µs** | **498,020** | 0.9388 µs | 1,065,139 | 0.47x *(8-step Newton unwarp)* |
 
-> Run the benchmark suite locally anytime with `pnpm benchmark:h3` or `pnpm benchmark`.
+Overall, T4's direct bit-packed topology gives it a substantial throughput advantage for most indexing and hierarchy operations in this benchmark, while retaining strict 1→4 geometric containment and configurable spherical/ellipsoidal coordinate handling. The full WGS84 warped conversion is intentionally more computationally expensive due to its numerical inverse transform.
 
 ## When to Use T4?
 
@@ -99,12 +109,16 @@ Spatial indexing systems involve fundamental geometric trade-offs. T4 was design
 - **Dual Marching Tetrahedra (DMT) & Volumetric Chunks**: Slicing T4 triangular prisms along radial altitude layers creates simplicial tetrahedral meshes with **zero topological ambiguity** (eliminating Marching Cubes hole/crack bugs) and clean adaptive Level-of-Detail (LOD).
 - **No 12 Degenerate Pentagons**: Unlike icosahedral systems (H3) that have 12 pentagonal singularities requiring special-case stitching, T4 has 4 completely homogeneous base faces.
 
-### 2. Exact Strict Hierarchies & Multi-Resolution Aggregation
-- **Zero Geometric Bleed ($1 \to 4$)**: 4 child cells strictly partition 100% of the parent triangle's geometric footprint with zero overlap. In contrast, hexagonal systems (Aperture 7) rotate $\sim 19.1^\circ$ at each resolution, crossing parent boundaries and making hierarchical roll-ups approximate.
-- **$O(1)$ Ancestry Queries**: Checking if cell $B$ is a descendant of cell $A$ (`isT4Descendant`) is a single 64-bit mask equality test.
+### 2. Strict Hierarchies & Multi-Resolution Aggregation
 
-### 3. Sub-Decimeter Precision in a Single 64-bit Integer
-- **28 Zoom Levels**: Zoom 28 achieves $\sim 5.5\text{ cm}$ ($0.055\text{ m}$) cell widths on Earth within a standard 64-bit integer (`BigInt`/`uint64`). H3 maxes out at resolution 15 ($\sim 50\text{ cm}$).
+- **Exact 1→4 containment** - Every T4 parent is partitioned into exactly four child triangles, with each child fully contained within its parent. This makes the hierarchy geometrically explicit rather than an approximation between resolutions.
+- **$O(1)$ ancestry queries** - Checking whether cell B is a descendant of cell A is a mask comparison against the packed subdivision path.
+- **Deterministic hierarchy** - A cell's complete lineage is encoded directly in its ID, allowing parent and child relationships to be derived without external hierarchy tables.
+
+### 3. Centimeter-Scale Resolution in a Single 64-bit Integer
+
+- **28 zoom levels** - Zoom 28 reaches approximately $\sim 5.5\text{ cm}$ cell width on Earth, while the complete cell address remains encoded in a single 64-bit `BigInt`.
+- **Predictable scaling** - Each additional zoom level quadrisects the cells, providing four times as many cells per level and roughly halving characteristic cell dimensions.
 
 ### 4. Non-Earth Planetary Bodies & Custom Spheres
 - T4 allows configuring the sphere radius and toggling ellipsoidal flattening (`applyEarthCurvature: false`), enabling seamless indexing of moons, asteroids, exoplanets, or synthetic game worlds.
@@ -122,11 +136,11 @@ T4 starts from a regular tetrahedron inscribed in the unit sphere, giving 4 base
 
 ### Subdivision
 
-Each face recursively quadrisects into 4 child triangles per zoom level: 3 "corner" triangles (indices 0–2) and 1 "center" triangle (index 3), formed from the edge midpoints. A cell's full address is its base face plus a sequence of subdivision indices, one per zoom level.
+Each face recursively quadrisects into 4 child triangles per zoom level: 3 "corner" triangles (indices 0–2) and 1 "center" triangle (index 3), formed from the edge midpoints. A cell's full address is its base face plus a sequence of 2-bit subdivision indices, one per zoom level, packed directly into the ID.
 
 ### T4 IDs
 
-A T4 ID is a single 64-bit BigInt packing:
+A T4 ID is a single 64-bit `BigInt` packing:
 - **Bits 63..62**: Base face (0–3)
 - **Bits 61..6**: Fixed-position subdivision indices (2 bits per zoom level, starting with subdivision 0 at bit 60 down to subdivision 27 at bit 6)
 - **Bit 5**: Validity flag (always 1 for valid IDs)
@@ -160,7 +174,7 @@ const id = latLngToT4(51.5074, -0.1278, 10); // London
 const { baseFace, subdivisions, zoom } = parseT4Id(id);
 console.log({ baseFace, subdivisions, zoom });
 ```
-At zoom 10, each cell covers a few kilometers, small enough for city-scale indexing while staying a single BigInt comparison away from any neighbor.
+At zoom 10, each cell covers a few kilometers, small enough for city-scale indexing while staying a single `BigInt` comparison away from any neighbor.
 
 ```typescript
 // Recover the cell's centroid and boundary
