@@ -4,10 +4,17 @@ import {
   parseT4Id,
   getParentT4Id,
   isValidT4Id,
+  isT4Descendant,
   geocentricToGeodetic,
   geodeticToGeocentric,
   getT4Vertices,
+  getT4Vertices2D,
   getT4Center,
+  getT4Center2D,
+  getT4Vertices3D,
+  getT4Center3D,
+  getT4CellArea,
+  unwarpAuthalicCorner,
   latLngToT4,
   getT4Neighbors,
   createT4,
@@ -44,10 +51,10 @@ describe("T4 Indexer", () => {
       expect(parsed.isValid).toBe(true);
     });
 
-    it("should shift right by 6 bits to get the base face at zoom 0", () => {
+    it("should shift right by 62 bits to get the base face", () => {
       const face = 3;
       const id = createT4Id(face, [], 0);
-      const faceExtracted = Number(id >> 6n);
+      const faceExtracted = Number((id >> 62n) & 3n);
       expect(faceExtracted).toBe(face);
     });
 
@@ -76,6 +83,23 @@ describe("T4 Indexer", () => {
       expect(parent4).toBeNull();
     });
 
+    it("should check descendants correctly with isT4Descendant", () => {
+      const parent = createT4Id(1, [0, 3], 2);
+      const child = createT4Id(1, [0, 3, 2, 1], 4);
+      const stranger = createT4Id(1, [0, 2, 2, 1], 4);
+      const otherFace = createT4Id(2, [0, 3, 2, 1], 4);
+
+      expect(isT4Descendant(child, parent)).toBe(true);
+      expect(isT4Descendant(stranger, parent)).toBe(false);
+      expect(isT4Descendant(otherFace, parent)).toBe(false);
+      expect(isT4Descendant(parent, child)).toBe(false);
+      expect(isT4Descendant(parent, parent)).toBe(false);
+
+      const root = createT4Id(1, [], 0);
+      expect(isT4Descendant(child, root)).toBe(true);
+      expect(isT4Descendant(otherFace, root)).toBe(false);
+    });
+
     it("should fail validation on invalid IDs", () => {
       expect(isValidT4Id(0n)).toBe(false); // Validity flag not set
       expect(isValidT4Id(1n << 5n)).toBe(true); // Valid Zoom 0, Face 0
@@ -83,9 +107,8 @@ describe("T4 Indexer", () => {
       // Zoom 29 is invalid
       expect(isValidT4Id((1n << 5n) | 29n)).toBe(false);
 
-      // Active bit checking
+      // Active bit checking: unused bits in 6..61 must be zero
       const id = createT4Id(0, [], 0);
-      // set bit 9 (which is inactive at Zoom 0)
       const corruptedId = id | (1n << 9n);
       expect(isValidT4Id(corruptedId)).toBe(false);
     });
@@ -115,8 +138,6 @@ describe("T4 Indexer", () => {
     });
 
     it("should verify the mathematical shift caused by Earth's bulge", () => {
-      // At geodetic latitude 45 degrees, curvature should shift geocentric latitude
-      // to atan((1 - f)^2 * tan(45)) = atan((1 - 1/298.257223563)^2) ~ 44.807897 degrees
       const geodeticInput: [number, number] = [0, 45];
 
       // With curvature: geocentric latitude should be ~44.807577 deg
@@ -164,7 +185,6 @@ describe("T4 Indexer", () => {
       expect(parsed.zoom).toBe(zoom);
 
       const center = getT4Center(id, { applyEarthCurvature: true });
-      // At zoom 15, the triangle should be very small, so its center should be extremely close to the input point
       expect(center[0]).toBeCloseTo(lng, 2);
       expect(center[1]).toBeCloseTo(lat, 2);
     });
@@ -175,6 +195,12 @@ describe("T4 Indexer", () => {
 
       const mappedId = latLngToT4(center[1], center[0], 5, { applyEarthCurvature: true });
       expect(mappedId).toBe(id);
+    });
+
+    it("should invert authalic corner warp with unwarpAuthalicCorner", () => {
+      const origBary: [number, number, number] = [0.2, 0.5, 0.3];
+      const unwarped = unwarpAuthalicCorner(origBary);
+      expect(unwarped[0] + unwarped[1] + unwarped[2]).toBeCloseTo(1.0, 6);
     });
   });
 
@@ -193,12 +219,11 @@ describe("T4 Indexer", () => {
 
     it("should verify that neighbors are adjacent (share 2 vertices)", () => {
       const id = createT4Id(0, [2, 1], 2);
-      const vertices = getT4Vertices(id);
+      const vertices = getT4Vertices(id, { authalicWarp: false });
 
       const neighbors = getT4Neighbors(id);
       for (const neighborId of neighbors) {
-        const neighborVertices = getT4Vertices(neighborId);
-        // Count shared vertices
+        const neighborVertices = getT4Vertices(neighborId, { authalicWarp: false });
         let sharedCount = 0;
         for (const v1 of vertices) {
           for (const v2 of neighborVertices) {
@@ -208,9 +233,39 @@ describe("T4 Indexer", () => {
             }
           }
         }
-        // Adjacent triangles must share exactly 2 vertices (1 edge)
         expect(sharedCount).toBe(2);
       }
+    });
+  });
+
+  describe("Spherical Cell Area", () => {
+    it("should calculate valid area for zoom 0 face", () => {
+      const id = createT4Id(0, [], 0);
+      const area = getT4CellArea(id, 6371.0);
+      // Total Earth sphere area = 4 * PI * R^2 ~ 510,064,472 km^2
+      // Each base face of regular tetrahedron covers exactly 1/4 of the sphere = ~127,516,118 km^2
+      const totalEarthArea = 4 * Math.PI * 6371.0 * 6371.0;
+      expect(area).toBeCloseTo(totalEarthArea / 4, -4);
+    });
+
+    it("should partition area among child cells and decrease with zoom", () => {
+      const id0 = createT4Id(0, [], 0);
+      const a0 = getT4CellArea(id0);
+
+      const c0 = getT4CellArea(createT4Id(0, [0], 1));
+      const c1 = getT4CellArea(createT4Id(0, [1], 1));
+      const c2 = getT4CellArea(createT4Id(0, [2], 1));
+      const c3 = getT4CellArea(createT4Id(0, [3], 1));
+
+      expect(c0).toBeGreaterThan(0);
+      expect(c1).toBeGreaterThan(0);
+      expect(c2).toBeGreaterThan(0);
+      expect(c3).toBeGreaterThan(0);
+      expect(Math.abs(c0 + c1 + c2 + c3 - a0) / a0).toBeLessThan(0.001);
+
+      const id2 = createT4Id(0, [0, 0], 2);
+      const a2 = getT4CellArea(id2);
+      expect(a2).toBeLessThan(c0);
     });
   });
 
@@ -222,6 +277,8 @@ describe("T4 Indexer", () => {
 
       expect(t4_1).toBe(t4_2); // same object instance reference
       expect(t4_1.zoom).toBe(2);
+      expect(t4_1.authalicWarp).toBe(true);
+      expect(t4_1.area).toBeGreaterThan(0);
     });
 
     it("should return parent, neighbors, and children as cached T4Objects", () => {
@@ -231,6 +288,7 @@ describe("T4 Indexer", () => {
       const parent = t4.parent;
       expect(parent).not.toBeNull();
       expect(parent!.zoom).toBe(2);
+      expect(t4.isDescendantOf(parent!)).toBe(true);
 
       const neighbors = t4.neighbors;
       expect(neighbors).toHaveLength(3);
@@ -244,6 +302,7 @@ describe("T4 Indexer", () => {
         expect(c.zoom).toBe(4);
         const parsed = parseT4Id(c.id);
         expect(parsed.subdivisions[3]).toBe(idx);
+        expect(c.isDescendantOf(t4)).toBe(true);
       });
 
       const childrenMethod = t4.getChildren();

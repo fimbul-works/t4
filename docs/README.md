@@ -2,26 +2,46 @@
 
 ## Interfaces
 
+### ParsedT4Id
+
+Defined in: [index.ts:228](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L228)
+
+#### Properties
+
+| Property | Type | Defined in |
+| ------ | ------ | ------ |
+| <a id="property-baseface"></a> `baseFace` | `number` | [index.ts:229](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L229) |
+| <a id="property-isvalid"></a> `isValid` | `boolean` | [index.ts:232](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L232) |
+| <a id="property-subdivisions"></a> `subdivisions` | `number`[] | [index.ts:230](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L230) |
+| <a id="property-zoom"></a> `zoom` | `number` | [index.ts:231](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L231) |
+
+***
+
 ### T4Object
 
-Defined in: index.ts:31
+Defined in: [index.ts:158](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L158)
 
 #### Properties
 
 | Property | Modifier | Type | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="property-applyearthcurvature"></a> `applyEarthCurvature` | `readonly` | `boolean` | index.ts:35 |
-| <a id="property-center"></a> `center` | `readonly` | `ArrayVector2D` | index.ts:37 |
-| <a id="property-center3d"></a> `center3D` | `readonly` | `ArrayVector3D` | index.ts:39 |
-| <a id="property-childids"></a> `childIds` | `readonly` | \[`bigint`, `bigint`, `bigint`, `bigint`\] | index.ts:44 |
-| <a id="property-children"></a> `children` | `readonly` | \[[`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object)\] | index.ts:42 |
-| <a id="property-id"></a> `id` | `readonly` | `bigint` | index.ts:32 |
-| <a id="property-neighbors"></a> `neighbors` | `readonly` | \[[`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object)\] | index.ts:41 |
-| <a id="property-parent"></a> `parent` | `readonly` | [`T4Object`](#t4object) \| `null` | index.ts:40 |
-| <a id="property-radiuskm"></a> `radiusKm` | `readonly` | `number` | index.ts:34 |
-| <a id="property-vertices"></a> `vertices` | `readonly` | \[`ArrayVector2D`, `ArrayVector2D`, `ArrayVector2D`\] | index.ts:36 |
-| <a id="property-vertices3d"></a> `vertices3D` | `readonly` | \[`ArrayVector3D`, `ArrayVector3D`, `ArrayVector3D`\] | index.ts:38 |
-| <a id="property-zoom"></a> `zoom` | `readonly` | `number` | index.ts:33 |
+| <a id="property-applyearthcurvature"></a> `applyEarthCurvature` | `readonly` | `boolean` | [index.ts:162](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L162) |
+| <a id="property-area"></a> `area` | `readonly` | `number` | [index.ts:171](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L171) |
+| <a id="property-authalicwarp"></a> `authalicWarp` | `readonly` | `boolean` | [index.ts:163](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L163) |
+| <a id="property-center"></a> `center` | `readonly` | `ArrayVector2D` | [index.ts:166](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L166) |
+| <a id="property-center2d"></a> `center2D` | `readonly` | `ArrayVector2D` | [index.ts:168](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L168) |
+| <a id="property-center3d"></a> `center3D` | `readonly` | `ArrayVector3D` | [index.ts:170](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L170) |
+| <a id="property-childids"></a> `childIds` | `readonly` | \[`bigint`, `bigint`, `bigint`, `bigint`\] | [index.ts:176](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L176) |
+| <a id="property-children"></a> `children` | `readonly` | \[[`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object)\] | [index.ts:174](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L174) |
+| <a id="property-id"></a> `id` | `readonly` | `bigint` | [index.ts:159](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L159) |
+| <a id="property-neighbors"></a> `neighbors` | `readonly` | \[[`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object)\] | [index.ts:173](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L173) |
+| <a id="property-parent"></a> `parent` | `readonly` | [`T4Object`](#t4object) \| `null` | [index.ts:172](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L172) |
+| <a id="property-radiuskm"></a> `radiusKm` | `readonly` | `number` | [index.ts:161](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L161) |
+| <a id="property-vertices"></a> `vertices` | `readonly` | \[`ArrayVector2D`, `ArrayVector2D`, `ArrayVector2D`\] | [index.ts:165](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L165) |
+| <a id="property-vertices2d"></a> `vertices2D` | `readonly` | \[`ArrayVector2D`, `ArrayVector2D`, `ArrayVector2D`\] | [index.ts:167](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L167) |
+| <a id="property-vertices3d"></a> `vertices3D` | `readonly` | \[`ArrayVector3D`, `ArrayVector3D`, `ArrayVector3D`\] | [index.ts:169](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L169) |
+| <a id="property-warpfactor"></a> `warpFactor` | `readonly` | `number` | [index.ts:164](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L164) |
+| <a id="property-zoom-1"></a> `zoom` | `readonly` | `number` | [index.ts:160](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L160) |
 
 #### Methods
 
@@ -31,34 +51,133 @@ Defined in: index.ts:31
 getChildren(): [T4Object, T4Object, T4Object, T4Object];
 ```
 
-Defined in: index.ts:43
+Defined in: [index.ts:175](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L175)
 
 ###### Returns
 
 \[[`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object), [`T4Object`](#t4object)\]
 
+##### isDescendantOf()
+
+```ts
+isDescendantOf(parent): boolean;
+```
+
+Defined in: [index.ts:177](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L177)
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `parent` | `bigint` \| [`T4Object`](#t4object) |
+
+###### Returns
+
+`boolean`
+
 ***
 
 ### T4Options
 
-Defined in: index.ts:26
+Defined in: [index.ts:151](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L151)
 
 #### Properties
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="property-applyearthcurvature-1"></a> `applyEarthCurvature?` | `boolean` | index.ts:28 |
-| <a id="property-radiuskm-1"></a> `radiusKm?` | `number` | index.ts:27 |
+| <a id="property-applyearthcurvature-1"></a> `applyEarthCurvature?` | `boolean` | [index.ts:153](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L153) |
+| <a id="property-authalicwarp-1"></a> `authalicWarp?` | `boolean` | [index.ts:154](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L154) |
+| <a id="property-radiuskm-1"></a> `radiusKm?` | `number` | [index.ts:152](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L152) |
+| <a id="property-warpfactor-1"></a> `warpFactor?` | `number` | [index.ts:155](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L155) |
+
+## Variables
+
+### BASE\_FACES
+
+```ts
+const BASE_FACES: [ArrayVector3D, ArrayVector3D, ArrayVector3D][];
+```
+
+Defined in: [index.ts:18](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L18)
+
+***
+
+### DEFAULT\_RADIUS\_KM
+
+```ts
+const DEFAULT_RADIUS_KM: 6371 = 6371.0;
+```
+
+Defined in: [index.ts:5](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L5)
+
+***
+
+### F\_EARTH
+
+```ts
+const F_EARTH: number;
+```
+
+Defined in: [index.ts:4](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L4)
+
+***
+
+### getT4Center2D
+
+```ts
+const getT4Center2D: (id, options?) => ArrayVector2D = getT4Center;
+```
+
+Defined in: [index.ts:771](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L771)
+
+Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `bigint` |
+| `options?` | `boolean` \| [`T4Options`](#t4options) |
+
+#### Returns
+
+`ArrayVector2D`
+
+***
+
+### getT4Vertices2D
+
+```ts
+const getT4Vertices2D: (id, options?) => [ArrayVector2D, ArrayVector2D, ArrayVector2D] = getT4Vertices;
+```
+
+Defined in: [index.ts:760](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L760)
+
+Gets the 2D GPS vertices of the T4 cell in [lng, lat] degrees.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `bigint` |
+| `options?` | `boolean` \| [`T4Options`](#t4options) |
+
+#### Returns
+
+\[`ArrayVector2D`, `ArrayVector2D`, `ArrayVector2D`\]
 
 ## Functions
 
 ### cartesianToT4()
 
 ```ts
-function cartesianToT4(P, zoom): bigint;
+function cartesianToT4(
+   P, 
+   zoom, 
+   options?): bigint;
 ```
 
-Defined in: index.ts:312
+Defined in: [index.ts:848](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L848)
 
 Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
 
@@ -68,6 +187,7 @@ Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
 | ------ | ------ |
 | `P` | `ArrayVector3D` |
 | `zoom` | `number` |
+| `options?` | [`T4Options`](#t4options) |
 
 #### Returns
 
@@ -81,7 +201,7 @@ Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
 function createT4(idOrConfig, options?): T4Object;
 ```
 
-Defined in: index.ts:395
+Defined in: [index.ts:1217](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1217)
 
 Standard OOP wrapper and memoized factory for T4 cells.
 
@@ -107,9 +227,14 @@ function createT4Id(
    zoom): bigint;
 ```
 
-Defined in: index.ts:53
+Defined in: [index.ts:208](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L208)
 
-Creates a T4 BigInt ID from base face, subdivision path, and zoom level.
+Creates a 64-bit T4 BigInt ID from base face, subdivision path, and zoom level.
+Bit layout:
+- Bits 63..62: base face (2 bits)
+- Bits 61..6: subdivisions (2 bits each from step 0 at bit 60 down to step 27 at bit 6)
+- Bit 5: validity flag (always 1)
+- Bits 4..0: zoom level (5 bits, 0-28)
 
 #### Parameters
 
@@ -128,19 +253,19 @@ Creates a T4 BigInt ID from base face, subdivision path, and zoom level.
 ### geocentricToGeodetic()
 
 ```ts
-function geocentricToGeodetic(xyz, applyEarthCurvature): ArrayVector2D;
+function geocentricToGeodetic(xyz, applyEarthCurvature?): ArrayVector2D;
 ```
 
-Defined in: index.ts:159
+Defined in: [index.ts:356](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L356)
 
 Converts geocentric Cartesian coordinates [x, y, z] to geodetic GPS [lng, lat] (degrees).
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `xyz` | `ArrayVector3D` |
-| `applyEarthCurvature` | `boolean` |
+| Parameter | Type | Default value |
+| ------ | ------ | ------ |
+| `xyz` | `ArrayVector3D` | `undefined` |
+| `applyEarthCurvature` | `boolean` | `true` |
 
 #### Returns
 
@@ -151,19 +276,19 @@ Converts geocentric Cartesian coordinates [x, y, z] to geodetic GPS [lng, lat] (
 ### geodeticToGeocentric()
 
 ```ts
-function geodeticToGeocentric(lngLat, applyEarthCurvature): ArrayVector3D;
+function geodeticToGeocentric(lngLat, applyEarthCurvature?): ArrayVector3D;
 ```
 
-Defined in: index.ts:183
+Defined in: [index.ts:382](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L382)
 
 Converts geodetic GPS [lng, lat] (degrees) to geocentric unit Cartesian coordinates [x, y, z].
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `lngLat` | `ArrayVector2D` |
-| `applyEarthCurvature` | `boolean` |
+| Parameter | Type | Default value |
+| ------ | ------ | ------ |
+| `lngLat` | `ArrayVector2D` | `undefined` |
+| `applyEarthCurvature` | `boolean` | `true` |
 
 #### Returns
 
@@ -177,9 +302,9 @@ Converts geodetic GPS [lng, lat] (degrees) to geocentric unit Cartesian coordina
 function getParentT4Id(id): bigint | null;
 ```
 
-Defined in: index.ts:106
+Defined in: [index.ts:282](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L282)
 
-Gets the parent T4 ID by decrementing zoom and bit-shifting positional bits.
+Gets the parent T4 ID by clearing the lowest subdivision bits and decrementing zoom.
 
 #### Parameters
 
@@ -193,13 +318,36 @@ Gets the parent T4 ID by decrementing zoom and bit-shifting positional bits.
 
 ***
 
+### getT4CellArea()
+
+```ts
+function getT4CellArea(id, radiusKm?): number;
+```
+
+Defined in: [index.ts:1129](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1129)
+
+Calculates the spherical surface area of the cell in square kilometers ($km^2$).
+
+#### Parameters
+
+| Parameter | Type | Default value |
+| ------ | ------ | ------ |
+| `id` | `bigint` | `undefined` |
+| `radiusKm` | `number` | `DEFAULT_RADIUS_KM` |
+
+#### Returns
+
+`number`
+
+***
+
 ### getT4Center()
 
 ```ts
 function getT4Center(id, options?): ArrayVector2D;
 ```
 
-Defined in: index.ts:263
+Defined in: [index.ts:765](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L765)
 
 Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
 
@@ -208,7 +356,7 @@ Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
 | Parameter | Type |
 | ------ | ------ |
 | `id` | `bigint` |
-| `options?` | [`T4Options`](#t4options) |
+| `options?` | `boolean` \| [`T4Options`](#t4options) |
 
 #### Returns
 
@@ -219,10 +367,13 @@ Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
 ### getT4Center3D()
 
 ```ts
-function getT4Center3D(id, radiusKm?): ArrayVector3D;
+function getT4Center3D(
+   id, 
+   radiusKm?, 
+   options?): ArrayVector3D;
 ```
 
-Defined in: index.ts:240
+Defined in: [index.ts:715](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L715)
 
 Gets the center point of the T4 cell on the sphere surface of radiusKm.
 
@@ -231,7 +382,8 @@ Gets the center point of the T4 cell on the sphere surface of radiusKm.
 | Parameter | Type | Default value |
 | ------ | ------ | ------ |
 | `id` | `bigint` | `undefined` |
-| `radiusKm` | `number` | `6371` |
+| `radiusKm` | `number` | `DEFAULT_RADIUS_KM` |
+| `options?` | [`T4Options`](#t4options) | `undefined` |
 
 #### Returns
 
@@ -245,9 +397,9 @@ Gets the center point of the T4 cell on the sphere surface of radiusKm.
 function getT4Children(id): [bigint, bigint, bigint, bigint];
 ```
 
-Defined in: index.ts:119
+Defined in: [index.ts:299](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L299)
 
-Gets the 4 child T4 IDs by incrementing zoom and shifting/appending subdivision bits.
+Gets the 4 child T4 IDs by setting the subdivision at zoom level and incrementing zoom.
 
 #### Parameters
 
@@ -267,9 +419,9 @@ Gets the 4 child T4 IDs by incrementing zoom and shifting/appending subdivision 
 function getT4Neighbors(id, _options?): [bigint, bigint, bigint];
 ```
 
-Defined in: index.ts:379
+Defined in: [index.ts:1063](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1063)
 
-Gets the 3 neighbor T4 IDs sharing the edges of the cell.
+Gets the 3 neighbor T4 IDs sharing the edges of the cell using discrete TriCoord arithmetic.
 
 #### Parameters
 
@@ -290,7 +442,7 @@ Gets the 3 neighbor T4 IDs sharing the edges of the cell.
 function getT4Vertices(id, options?): [ArrayVector2D, ArrayVector2D, ArrayVector2D];
 ```
 
-Defined in: index.ts:250
+Defined in: [index.ts:738](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L738)
 
 Gets the 2D GPS vertices of the T4 cell in [lng, lat] degrees.
 
@@ -299,7 +451,7 @@ Gets the 2D GPS vertices of the T4 cell in [lng, lat] degrees.
 | Parameter | Type |
 | ------ | ------ |
 | `id` | `bigint` |
-| `options?` | [`T4Options`](#t4options) |
+| `options?` | `boolean` \| [`T4Options`](#t4options) |
 
 #### Returns
 
@@ -310,10 +462,13 @@ Gets the 2D GPS vertices of the T4 cell in [lng, lat] degrees.
 ### getT4Vertices3D()
 
 ```ts
-function getT4Vertices3D(id, radiusKm?): [ArrayVector3D, ArrayVector3D, ArrayVector3D];
+function getT4Vertices3D(
+   id, 
+   radiusKm?, 
+   options?): [ArrayVector3D, ArrayVector3D, ArrayVector3D];
 ```
 
-Defined in: index.ts:231
+Defined in: [index.ts:681](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L681)
 
 Gets the 3D vertices of the T4 cell normalized to the sphere surface of radiusKm.
 
@@ -322,7 +477,8 @@ Gets the 3D vertices of the T4 cell normalized to the sphere surface of radiusKm
 | Parameter | Type | Default value |
 | ------ | ------ | ------ |
 | `id` | `bigint` | `undefined` |
-| `radiusKm` | `number` | `6371` |
+| `radiusKm` | `number` | `DEFAULT_RADIUS_KM` |
+| `options?` | [`T4Options`](#t4options) | `undefined` |
 
 #### Returns
 
@@ -336,7 +492,7 @@ Gets the 3D vertices of the T4 cell normalized to the sphere surface of radiusKm
 function getT4VerticesFlat(id): [ArrayVector3D, ArrayVector3D, ArrayVector3D];
 ```
 
-Defined in: index.ts:203
+Defined in: [index.ts:405](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L405)
 
 Gets the vertices of the T4 cell in flat 3D space on the tetrahedron face.
 
@@ -352,15 +508,38 @@ Gets the vertices of the T4 cell in flat 3D space on the tetrahedron face.
 
 ***
 
+### isT4Descendant()
+
+```ts
+function isT4Descendant(childId, parentId): boolean;
+```
+
+Defined in: [index.ts:319](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L319)
+
+Checks whether childId is a descendant of parentId in $O(1)$ bit comparisons.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `childId` | `bigint` |
+| `parentId` | `bigint` |
+
+#### Returns
+
+`boolean`
+
+***
+
 ### isValidT4Id()
 
 ```ts
 function isValidT4Id(id): boolean;
 ```
 
-Defined in: index.ts:141
+Defined in: [index.ts:266](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L266)
 
-Validates whether a BigInt represents a valid T4 ID.
+Validates whether a BigInt represents a valid 64-bit T4 ID.
 
 #### Parameters
 
@@ -384,7 +563,7 @@ function latLngToT4(
    options?): bigint;
 ```
 
-Defined in: index.ts:362
+Defined in: [index.ts:902](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L902)
 
 Converts GPS [lat, lng] degrees to a T4 ID.
 
@@ -406,17 +585,12 @@ Converts GPS [lat, lng] degrees to a T4 ID.
 ### parseT4Id()
 
 ```ts
-function parseT4Id(id): {
-  baseFace: number;
-  isValid: boolean;
-  subdivisions: number[];
-  zoom: number;
-};
+function parseT4Id(id): ParsedT4Id;
 ```
 
-Defined in: index.ts:78
+Defined in: [index.ts:238](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L238)
 
-Parses a T4 BigInt ID into its components.
+Parses a T4 BigInt ID into its face, subdivisions array, zoom, and validity flag.
 
 #### Parameters
 
@@ -426,18 +600,53 @@ Parses a T4 BigInt ID into its components.
 
 #### Returns
 
+[`ParsedT4Id`](#parsedt4id)
+
+***
+
+### projectAuthalicCornerWarp()
+
 ```ts
-{
-  baseFace: number;
-  isValid: boolean;
-  subdivisions: number[];
-  zoom: number;
-}
+function projectAuthalicCornerWarp(
+   flatPt, 
+   baseFaceIndex, 
+   warpFactor?): ArrayVector3D;
 ```
 
-| Name | Type | Defined in |
+Defined in: [index.ts:635](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L635)
+
+Projects a flat point on a tetrahedron base face using the authalic corner warp.
+
+#### Parameters
+
+| Parameter | Type | Default value |
 | ------ | ------ | ------ |
-| `baseFace` | `number` | index.ts:79 |
-| `isValid` | `boolean` | index.ts:82 |
-| `subdivisions` | `number`[] | index.ts:80 |
-| `zoom` | `number` | index.ts:81 |
+| `flatPt` | `ArrayVector3D` | `undefined` |
+| `baseFaceIndex` | `number` | `undefined` |
+| `warpFactor` | `number` | `1.0` |
+
+#### Returns
+
+`ArrayVector3D`
+
+***
+
+### unwarpAuthalicCorner()
+
+```ts
+function unwarpAuthalicCorner(baryW): ArrayVector3D;
+```
+
+Defined in: [index.ts:599](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L599)
+
+Inverts the authalic corner warp on barycentric coordinates.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `baryW` | `ArrayVector3D` |
+
+#### Returns
+
+`ArrayVector3D`

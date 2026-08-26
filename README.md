@@ -82,12 +82,13 @@ Each face recursively quadrisects into 4 child triangles per zoom level: 3 "corn
 
 ### T4 IDs
 
-A T4 ID is a single BigInt packing:
-- Bits 0–4: zoom level (0–28)
-- Bit 5: validity flag
-- Bits 6+: positional bits — base face at the top, most recent subdivision at the bottom
+A T4 ID is a single 64-bit BigInt packing:
+- **Bits 63..62**: Base face (0–3)
+- **Bits 61..6**: Fixed-position subdivision indices (2 bits per zoom level, starting with subdivision 0 at bit 60 down to subdivision 27 at bit 6)
+- **Bit 5**: Validity flag (always 1 for valid IDs)
+- **Bits 4..0**: Zoom level (0–28)
 
-This makes parent lookup a right-shift and child lookup a left-shift-and-append, with no traversal of external structures.
+This fixed-position layout enables $O(1)$ constant-time ancestor checks (`isT4Descendant`), mask-based parent and child generation, and exact discrete coordinate indexing without bit-shifting the path.
 
 ### Zoom Levels
 

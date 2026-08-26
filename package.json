@@ -45,6 +45,7 @@
     "format": "npx biome format --write",
     "test": "vitest",
     "sizes": "npx bundle-size",
+    "benchmark": "tsx benchmark_t4.ts",
     "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {

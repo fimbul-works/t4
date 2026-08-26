@@ -11,6 +11,7 @@ import {
   isValidT4Id,
   latLngToT4,
   parseT4Id,
+  getT4CellArea,
 } from "./index";
 
 // ---- shared geometry helpers (3D, flat-space arithmetic) ----
@@ -145,10 +146,20 @@ describe("T4 Property & Edge-Case Tests", () => {
     it("center round-trip is stable at z28", () => {
       const lat = 60.1699;
       const lng = 24.9384;
-      const id = latLngToT4(lat, lng, 28);
-      const center = getT4Center(id);
-      const back = latLngToT4(center[1], center[0], 28);
+      const id = latLngToT4(lat, lng, 28, { authalicWarp: false });
+      const center = getT4Center(id, { authalicWarp: false });
+      const back = latLngToT4(center[1], center[0], 28, { authalicWarp: false });
       expect(back).toBe(id);
+    });
+
+    it("authalic warp shifts cell centers toward equal-area geometry", () => {
+      const id = createT4Id(0, [0, 0, 0, 0], 4);
+      const unwarped = getT4Center(id, { authalicWarp: false });
+      const warped = getT4Center(id, { authalicWarp: true });
+
+      expect(unwarped).not.toEqual(warped);
+      expect(Math.abs(warped[0])).toBeGreaterThanOrEqual(0);
+      expect(Math.abs(warped[1])).toBeGreaterThanOrEqual(0);
     });
 
     // 6. A tetrahedron vertex is shared by 3 faces; the face assignment is a
@@ -157,7 +168,9 @@ describe("T4 Property & Edge-Case Tests", () => {
       for (const [name, v] of TETRA_VERTICES) {
         const faces = new Set<number>();
         for (let i = 0; i < 50; i++) {
-          faces.add(parseT4Id(cartesianToT4(v as Parameters<typeof cartesianToT4>[0], 5)).baseFace);
+          faces.add(
+            parseT4Id(cartesianToT4(v as Parameters<typeof cartesianToT4>[0], 5, { authalicWarp: false })).baseFace,
+          );
         }
         expect(faces.size).toBe(1);
         // Document which face wins (informational; pinning the current behavior).
@@ -220,8 +233,8 @@ describe("T4 Property & Edge-Case Tests", () => {
     ] as const)("%s produces a valid id and round-trips", (_name, [lat, lng]) => {
       const id = latLngToT4(lat, lng, 10);
       expect(isValidT4Id(id)).toBe(true);
-      const center = getT4Center(id);
-      const back = latLngToT4(center[1], center[0], 10);
+      const center = getT4Center(id, { authalicWarp: false });
+      const back = latLngToT4(center[1], center[0], 10, { authalicWarp: false });
       expect(back).toBe(id);
     });
   });
@@ -242,6 +255,33 @@ describe("T4 Property & Edge-Case Tests", () => {
     it("isValidT4Id accepts well-formed extremes", () => {
       expect(isValidT4Id(createT4Id(0, [], 0))).toBe(true);
       expect(isValidT4Id(createT4Id(3, Array(28).fill(2), 28))).toBe(true);
+    });
+  });
+
+  describe("Global Sphere Conservation", () => {
+    it("sum of 4 base faces equals total sphere surface area", () => {
+      const R = 6371.0;
+      const expectedTotalArea = 4 * Math.PI * R * R;
+      let totalArea = 0;
+      for (let face = 0; face < 4; face++) {
+        const id = createT4Id(face, [], 0);
+        totalArea += getT4CellArea(id, R);
+      }
+      expect(Math.abs(totalArea - expectedTotalArea) / expectedTotalArea).toBeLessThan(0.0001);
+    });
+
+    it("round-trips bit layout across all zoom levels 0 to 28", () => {
+      for (let z = 0; z <= 28; z++) {
+        const path = Array.from({ length: z }, (_, i) => i % 4);
+        const id = createT4Id(z % 4, path, z);
+        expect(isValidT4Id(id)).toBe(true);
+
+        const parsed = parseT4Id(id);
+        expect(parsed.baseFace).toBe(z % 4);
+        expect(parsed.zoom).toBe(z);
+        expect(parsed.subdivisions).toEqual(path);
+        expect(parsed.isValid).toBe(true);
+      }
     });
   });
 });
