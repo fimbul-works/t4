@@ -1,9 +1,9 @@
 {
   "name": "@fimbul-works/t4",
-  "description": "A ultra-lightweight hierarchical triangular global grid system (DGGS) mapped to the WGS84 ellipsoid. Fast bitwise spatial indexing with sub-decimeter accuracy at up to 29 zoom levels.",
+  "description": "An ultra-lightweight hierarchical triangular global grid system (DGGS) mapped to the WGS84 ellipsoid. Fast bitwise spatial indexing with sub-decimeter accuracy at up to 29 zoom levels.",
   "version": "1.0.0",
   "type": "module",
-  "private": true,
+  "private": false,
   "license": "MIT",
   "author": "FimbulWorks <contact@fimbul.works>",
   "homepage": "https://github.com/fimbul-works/t4#readme",
@@ -14,7 +14,28 @@
   "bugs": {
     "url": "https://github.com/fimbul-works/t4/issues"
   },
-  "keywords": [],
+  "keywords": [
+    "dggs",
+    "geospatial",
+    "spatial-index",
+    "spatial-indexing",
+    "discrete-global-grid",
+    "gis",
+    "tetrahedron",
+    "triangulation",
+    "geohash",
+    "h3",
+    "s2",
+    "wgs84",
+    "geodesy",
+    "spherical-geometry",
+    "quadtree",
+    "procedural-generation",
+    "planet-generation",
+    "marching-tetrahedra",
+    "mesh",
+    "godot"
+  ],
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/esm/index.d.ts",
@@ -30,7 +51,7 @@
     "docs",
     "README.md",
     "LICENSE",
-    "T.png"
+    "T4.png"
   ],
   "sideEffects": false,
   "scripts": {
