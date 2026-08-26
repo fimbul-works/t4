@@ -177,6 +177,7 @@ interface TestData {
   parent_ids: bigint[];
   subs_arr: number[][];
   base_faces: number[];
+  paths: number[][];
 }
 
 function prepareTestDataForZoom(zoom: number, samplePoints: SamplePoint[]): TestData {
@@ -186,6 +187,7 @@ function prepareTestDataForZoom(zoom: number, samplePoints: SamplePoint[]): Test
   const parent_ids: bigint[] = [];
   const subs_arr: number[][] = [];
   const base_faces: number[] = [];
+  const paths: number[][] = [];
 
   for (const pt of samplePoints) {
     const p3 = pt.pos_3d;
@@ -203,6 +205,7 @@ function prepareTestDataForZoom(zoom: number, samplePoints: SamplePoint[]): Test
 
     subs_arr.push(parsed.subdivisions);
     base_faces.push(parsed.baseFace);
+    paths.push([parsed.baseFace, ...parsed.subdivisions]);
   }
 
   return {
@@ -212,6 +215,7 @@ function prepareTestDataForZoom(zoom: number, samplePoints: SamplePoint[]): Test
     parent_ids,
     subs_arr,
     base_faces,
+    paths,
   };
 }
 
@@ -309,11 +313,11 @@ const anyT4 = T4 as unknown as {
 };
 
 function executeOp(opKey: string, idx: number, zoom: number, data: TestData): void {
-  const { points_3d, points_2d, cell_ids, parent_ids, subs_arr, base_faces } = data;
+  const { points_3d, points_2d, cell_ids, parent_ids, paths } = data;
 
   switch (opKey) {
     case "create_id":
-      T4.createT4Id(base_faces[idx], subs_arr[idx], zoom);
+      T4.createT4Id(paths[idx]);
       break;
     case "parse_id":
       T4.parseT4Id(cell_ids[idx]);

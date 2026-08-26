@@ -4,16 +4,16 @@
 
 ### ParsedT4Id
 
-Defined in: [index.ts:228](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L228)
+Defined in: [index.ts:268](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L268)
 
 #### Properties
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="property-baseface"></a> `baseFace` | `number` | [index.ts:229](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L229) |
-| <a id="property-isvalid"></a> `isValid` | `boolean` | [index.ts:232](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L232) |
-| <a id="property-subdivisions"></a> `subdivisions` | `number`[] | [index.ts:230](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L230) |
-| <a id="property-zoom"></a> `zoom` | `number` | [index.ts:231](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L231) |
+| <a id="property-baseface"></a> `baseFace` | `number` | [index.ts:269](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L269) |
+| <a id="property-isvalid"></a> `isValid` | `boolean` | [index.ts:272](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L272) |
+| <a id="property-subdivisions"></a> `subdivisions` | `number`[] | [index.ts:270](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L270) |
+| <a id="property-zoom"></a> `zoom` | `number` | [index.ts:271](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L271) |
 
 ***
 
@@ -128,7 +128,7 @@ Defined in: [index.ts:4](https://github.com/fimbul-works/t4/blob/main/src/index.
 const getT4Center2D: (id, options?) => ArrayVector2D = getT4Center;
 ```
 
-Defined in: [index.ts:771](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L771)
+Defined in: [index.ts:811](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L811)
 
 Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
 
@@ -151,7 +151,7 @@ Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
 const getT4Vertices2D: (id, options?) => [ArrayVector2D, ArrayVector2D, ArrayVector2D] = getT4Vertices;
 ```
 
-Defined in: [index.ts:760](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L760)
+Defined in: [index.ts:800](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L800)
 
 Gets the 2D GPS vertices of the T4 cell in [lng, lat] degrees.
 
@@ -177,7 +177,7 @@ function cartesianToT4(
    options?): bigint;
 ```
 
-Defined in: [index.ts:848](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L848)
+Defined in: [index.ts:888](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L888)
 
 Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
 
@@ -201,7 +201,7 @@ Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
 function createT4(idOrConfig, options?): T4Object;
 ```
 
-Defined in: [index.ts:1217](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1217)
+Defined in: [index.ts:1257](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1257)
 
 Standard OOP wrapper and memoized factory for T4 cells.
 
@@ -209,7 +209,7 @@ Standard OOP wrapper and memoized factory for T4 cells.
 
 | Parameter | Type |
 | ------ | ------ |
-| `idOrConfig` | \| `bigint` \| \{ `baseFace`: `number`; `subdivisions?`: `number`[]; `zoom?`: `number`; \} |
+| `idOrConfig` | \| `bigint` \| `number`[] \| \{ `baseFace`: `number`; `subdivisions?`: `number`[]; `zoom?`: `number`; \} |
 | `options?` | [`T4Options`](#t4options) |
 
 #### Returns
@@ -220,15 +220,6 @@ Standard OOP wrapper and memoized factory for T4 cells.
 
 ### createT4Id()
 
-```ts
-function createT4Id(
-   baseFace, 
-   subdivisions, 
-   zoom): bigint;
-```
-
-Defined in: [index.ts:208](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L208)
-
 Creates a 64-bit T4 BigInt ID from base face, subdivision path, and zoom level.
 Bit layout:
 - Bits 63..62: base face (2 bits)
@@ -236,15 +227,43 @@ Bit layout:
 - Bit 5: validity flag (always 1)
 - Bits 4..0: zoom level (5 bits, 0-28)
 
-#### Parameters
+#### Call Signature
+
+```ts
+function createT4Id(path): bigint;
+```
+
+Defined in: [index.ts:203](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L203)
+
+Creates a 64-bit T4 BigInt ID from a full path array `[baseFace, ...subdivisions]`.
+
+##### Parameters
 
 | Parameter | Type |
 | ------ | ------ |
-| `baseFace` | `number` |
-| `subdivisions` | `number`[] |
-| `zoom` | `number` |
+| `path` | `number`[] |
 
-#### Returns
+##### Returns
+
+`bigint`
+
+#### Call Signature
+
+```ts
+function createT4Id(...path): bigint;
+```
+
+Defined in: [index.ts:208](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L208)
+
+Creates a 64-bit T4 BigInt ID from variadic path arguments `(baseFace, ...subdivisions)`.
+
+##### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| ...`path` | `number`[] |
+
+##### Returns
 
 `bigint`
 
@@ -256,7 +275,7 @@ Bit layout:
 function geocentricToGeodetic(xyz, applyEarthCurvature?): ArrayVector2D;
 ```
 
-Defined in: [index.ts:356](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L356)
+Defined in: [index.ts:396](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L396)
 
 Converts geocentric Cartesian coordinates [x, y, z] to geodetic GPS [lng, lat] (degrees).
 
@@ -279,7 +298,7 @@ Converts geocentric Cartesian coordinates [x, y, z] to geodetic GPS [lng, lat] (
 function geodeticToGeocentric(lngLat, applyEarthCurvature?): ArrayVector3D;
 ```
 
-Defined in: [index.ts:382](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L382)
+Defined in: [index.ts:422](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L422)
 
 Converts geodetic GPS [lng, lat] (degrees) to geocentric unit Cartesian coordinates [x, y, z].
 
@@ -302,7 +321,7 @@ Converts geodetic GPS [lng, lat] (degrees) to geocentric unit Cartesian coordina
 function getParentT4Id(id): bigint | null;
 ```
 
-Defined in: [index.ts:282](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L282)
+Defined in: [index.ts:322](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L322)
 
 Gets the parent T4 ID by clearing the lowest subdivision bits and decrementing zoom.
 
@@ -324,7 +343,7 @@ Gets the parent T4 ID by clearing the lowest subdivision bits and decrementing z
 function getT4CellArea(id, radiusKm?): number;
 ```
 
-Defined in: [index.ts:1129](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1129)
+Defined in: [index.ts:1169](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1169)
 
 Calculates the spherical surface area of the cell in square kilometers ($km^2$).
 
@@ -347,7 +366,7 @@ Calculates the spherical surface area of the cell in square kilometers ($km^2$).
 function getT4Center(id, options?): ArrayVector2D;
 ```
 
-Defined in: [index.ts:765](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L765)
+Defined in: [index.ts:805](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L805)
 
 Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
 
@@ -373,7 +392,7 @@ function getT4Center3D(
    options?): ArrayVector3D;
 ```
 
-Defined in: [index.ts:715](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L715)
+Defined in: [index.ts:755](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L755)
 
 Gets the center point of the T4 cell on the sphere surface of radiusKm.
 
@@ -397,7 +416,7 @@ Gets the center point of the T4 cell on the sphere surface of radiusKm.
 function getT4Children(id): [bigint, bigint, bigint, bigint];
 ```
 
-Defined in: [index.ts:299](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L299)
+Defined in: [index.ts:339](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L339)
 
 Gets the 4 child T4 IDs by setting the subdivision at zoom level and incrementing zoom.
 
@@ -419,7 +438,7 @@ Gets the 4 child T4 IDs by setting the subdivision at zoom level and incrementin
 function getT4Neighbors(id, _options?): [bigint, bigint, bigint];
 ```
 
-Defined in: [index.ts:1063](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1063)
+Defined in: [index.ts:1103](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L1103)
 
 Gets the 3 neighbor T4 IDs sharing the edges of the cell using discrete TriCoord arithmetic.
 
@@ -442,7 +461,7 @@ Gets the 3 neighbor T4 IDs sharing the edges of the cell using discrete TriCoord
 function getT4Vertices(id, options?): [ArrayVector2D, ArrayVector2D, ArrayVector2D];
 ```
 
-Defined in: [index.ts:738](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L738)
+Defined in: [index.ts:778](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L778)
 
 Gets the 2D GPS vertices of the T4 cell in [lng, lat] degrees.
 
@@ -468,7 +487,7 @@ function getT4Vertices3D(
    options?): [ArrayVector3D, ArrayVector3D, ArrayVector3D];
 ```
 
-Defined in: [index.ts:681](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L681)
+Defined in: [index.ts:721](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L721)
 
 Gets the 3D vertices of the T4 cell normalized to the sphere surface of radiusKm.
 
@@ -492,7 +511,7 @@ Gets the 3D vertices of the T4 cell normalized to the sphere surface of radiusKm
 function getT4VerticesFlat(id): [ArrayVector3D, ArrayVector3D, ArrayVector3D];
 ```
 
-Defined in: [index.ts:405](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L405)
+Defined in: [index.ts:445](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L445)
 
 Gets the vertices of the T4 cell in flat 3D space on the tetrahedron face.
 
@@ -514,7 +533,7 @@ Gets the vertices of the T4 cell in flat 3D space on the tetrahedron face.
 function isT4Descendant(childId, parentId): boolean;
 ```
 
-Defined in: [index.ts:319](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L319)
+Defined in: [index.ts:359](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L359)
 
 Checks whether childId is a descendant of parentId in $O(1)$ bit comparisons.
 
@@ -537,7 +556,7 @@ Checks whether childId is a descendant of parentId in $O(1)$ bit comparisons.
 function isValidT4Id(id): boolean;
 ```
 
-Defined in: [index.ts:266](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L266)
+Defined in: [index.ts:306](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L306)
 
 Validates whether a BigInt represents a valid 64-bit T4 ID.
 
@@ -563,7 +582,7 @@ function latLngToT4(
    options?): bigint;
 ```
 
-Defined in: [index.ts:902](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L902)
+Defined in: [index.ts:942](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L942)
 
 Converts GPS [lat, lng] degrees to a T4 ID.
 
@@ -588,7 +607,7 @@ Converts GPS [lat, lng] degrees to a T4 ID.
 function parseT4Id(id): ParsedT4Id;
 ```
 
-Defined in: [index.ts:238](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L238)
+Defined in: [index.ts:278](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L278)
 
 Parses a T4 BigInt ID into its face, subdivisions array, zoom, and validity flag.
 
@@ -613,7 +632,7 @@ function projectAuthalicCornerWarp(
    warpFactor?): ArrayVector3D;
 ```
 
-Defined in: [index.ts:635](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L635)
+Defined in: [index.ts:675](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L675)
 
 Projects a flat point on a tetrahedron base face using the authalic corner warp.
 
@@ -637,7 +656,7 @@ Projects a flat point on a tetrahedron base face using the authalic corner warp.
 function unwarpAuthalicCorner(baryW): ArrayVector3D;
 ```
 
-Defined in: [index.ts:599](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L599)
+Defined in: [index.ts:639](https://github.com/fimbul-works/t4/blob/main/src/index.ts#L639)
 
 Inverts the authalic corner warp on barycentric coordinates.
 

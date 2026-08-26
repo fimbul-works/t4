@@ -56,7 +56,7 @@ describe("T4 Property & Edge-Case Tests", () => {
         3: [0, 1, 2],
       };
       for (let face = 0; face < 4; face++) {
-        const id = createT4Id(face, [], 0);
+        const id = createT4Id(face);
         const ns = getT4Neighbors(id);
         const neighborFaces = ns.map((n) => parseT4Id(n).baseFace).sort();
         expect(neighborFaces).toEqual(adjacent[face].slice().sort());
@@ -71,7 +71,7 @@ describe("T4 Property & Edge-Case Tests", () => {
     //    the "neighbor on the other edge" scenario from the requirements.
     it("corner cell at base-face seam has a cross-face neighbor that still shares an edge", () => {
       const z = 12;
-      const id = createT4Id(0, Array(z).fill(0), z);
+      const id = createT4Id(0, ...Array(z).fill(0));
       const v = getT4VerticesFlat(id);
       const ns = getT4Neighbors(id);
       const neighborFaces = ns.map((n) => parseT4Id(n).baseFace);
@@ -91,7 +91,7 @@ describe("T4 Property & Edge-Case Tests", () => {
       for (let face = 0; face < 4; face++) {
         for (let trial = 0; trial < 200; trial++) {
           const path = Array.from({ length: 8 }, () => Math.floor(Math.random() * 4));
-          const id = createT4Id(face, path, 8);
+          const id = createT4Id(face, ...path);
           const ns = getT4Neighbors(id);
           for (const n of ns) {
             const back = getT4Neighbors(n);
@@ -107,7 +107,7 @@ describe("T4 Property & Edge-Case Tests", () => {
     //    combined vertex set (de-duplicated) is the parent's 3 corners plus
     //    the 3 edge midpoints — exactly 6 distinct points, bit-identical.
     it("children partition the parent into 6 distinct vertices (3 corners + 3 midpoints)", () => {
-      const id = createT4Id(2, [0, 1, 3, 2], 4);
+      const id = createT4Id(2, 0, 1, 3, 2);
       const parentVerts = getT4VerticesFlat(id);
       const childVerts = getT4Children(id).map((c) => getT4VerticesFlat(c));
 
@@ -130,7 +130,7 @@ describe("T4 Property & Edge-Case Tests", () => {
     //     formed from the 3 edge midpoints; it shares one full edge with each
     //     of the 3 corner children. This is the internal adjacency contract.
     it("center child (index 3) shares an edge with each corner child (0,1,2)", () => {
-      const id = createT4Id(1, [2, 0, 1], 3);
+      const id = createT4Id(1, 2, 0, 1);
       const childIds = getT4Children(id);
       const centerV = getT4VerticesFlat(childIds[3]);
       for (let i = 0; i < 3; i++) {
@@ -153,7 +153,7 @@ describe("T4 Property & Edge-Case Tests", () => {
     });
 
     it("authalic warp shifts cell centers toward equal-area geometry", () => {
-      const id = createT4Id(0, [0, 0, 0, 0], 4);
+      const id = createT4Id(0, 0, 0, 0, 0);
       const unwarped = getT4Center(id, { authalicWarp: false });
       const warped = getT4Center(id, { authalicWarp: true });
 
@@ -197,7 +197,7 @@ describe("T4 Property & Edge-Case Tests", () => {
     //    of the same cell id must coexist in the cache. Recreating the Earth
     //    variant after creating Mars must return the SAME Earth object.
     it("createT4 with mixed options does not evict the other variant", () => {
-      const id = createT4Id(1, [0, 1, 2], 3);
+      const id = createT4Id(1, 0, 1, 2);
       const earth = createT4(id, { radiusKm: 6371, applyEarthCurvature: true });
       const mars = createT4(id, { radiusKm: 3390, applyEarthCurvature: false });
       const earthAgain = createT4(id, { radiusKm: 6371, applyEarthCurvature: true });
@@ -214,10 +214,10 @@ describe("T4 Property & Edge-Case Tests", () => {
   describe("Zoom boundary handling", () => {
     // 8. Children at max zoom throws; parent at zoom 0 returns null.
     it("getT4Children throws at z28 and getParentT4Id returns null at z0", () => {
-      const maxId = createT4Id(3, Array(28).fill(2), 28);
+      const maxId = createT4Id(3, ...Array(28).fill(2));
       expect(() => getT4Children(maxId)).toThrow();
 
-      const rootId = createT4Id(0, [], 0);
+      const rootId = createT4Id(0);
       expect(getParentT4Id(rootId)).toBeNull();
     });
   });
@@ -245,16 +245,16 @@ describe("T4 Property & Edge-Case Tests", () => {
     it.each([
       ["zoom 29", (1n << 5n) | 29n],
       ["negative (-1n)", -1n],
-      ["validity flag cleared", createT4Id(0, [], 0) & ~(1n << 5n)],
-      ["stray high bit", createT4Id(0, [], 0) | (1n << 70n)],
+      ["validity flag cleared", createT4Id(0) & ~(1n << 5n)],
+      ["stray high bit", createT4Id(0) | (1n << 70n)],
       ["bare zero", 0n],
     ])("isValidT4Id rejects %s", (_name, id) => {
       expect(isValidT4Id(id)).toBe(false);
     });
 
     it("isValidT4Id accepts well-formed extremes", () => {
-      expect(isValidT4Id(createT4Id(0, [], 0))).toBe(true);
-      expect(isValidT4Id(createT4Id(3, Array(28).fill(2), 28))).toBe(true);
+      expect(isValidT4Id(createT4Id(0))).toBe(true);
+      expect(isValidT4Id(createT4Id(3, ...Array(28).fill(2)))).toBe(true);
     });
   });
 
@@ -264,7 +264,7 @@ describe("T4 Property & Edge-Case Tests", () => {
       const expectedTotalArea = 4 * Math.PI * R * R;
       let totalArea = 0;
       for (let face = 0; face < 4; face++) {
-        const id = createT4Id(face, [], 0);
+        const id = createT4Id(face);
         totalArea += getT4CellArea(id, R);
       }
       expect(Math.abs(totalArea - expectedTotalArea) / expectedTotalArea).toBeLessThan(0.0001);
@@ -273,7 +273,7 @@ describe("T4 Property & Edge-Case Tests", () => {
     it("round-trips bit layout across all zoom levels 0 to 28", () => {
       for (let z = 0; z <= 28; z++) {
         const path = Array.from({ length: z }, (_, i) => i % 4);
-        const id = createT4Id(z % 4, path, z);
+        const id = createT4Id(z % 4, ...path);
         expect(isValidT4Id(id)).toBe(true);
 
         const parsed = parseT4Id(id);

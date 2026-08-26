@@ -8,17 +8,12 @@ import {
   geocentricToGeodetic,
   geodeticToGeocentric,
   getT4Vertices,
-  getT4Vertices2D,
   getT4Center,
-  getT4Center2D,
-  getT4Vertices3D,
-  getT4Center3D,
   getT4CellArea,
   unwarpAuthalicCorner,
   latLngToT4,
   getT4Neighbors,
   createT4,
-  getT4Children,
 } from "./index";
 import { magnitude3D } from "@fimbul-works/vec/3d";
 
@@ -26,7 +21,7 @@ describe("T4 Indexer", () => {
   describe("Bitwise Operations", () => {
     it("should round-trip createT4Id and parseT4Id for Zoom 0", () => {
       for (let face = 0; face < 4; face++) {
-        const id = createT4Id(face, [], 0);
+        const id = createT4Id(face);
         expect(isValidT4Id(id)).toBe(true);
 
         const parsed = parseT4Id(id);
@@ -40,7 +35,7 @@ describe("T4 Indexer", () => {
     it("should round-trip createT4Id and parseT4Id for zoom levels > 0", () => {
       const face = 2;
       const subdivisions = [0, 3, 1, 2, 3];
-      const id = createT4Id(face, subdivisions, 5);
+      const id = createT4Id(face, ...subdivisions);
 
       expect(isValidT4Id(id)).toBe(true);
 
@@ -51,15 +46,76 @@ describe("T4 Indexer", () => {
       expect(parsed.isValid).toBe(true);
     });
 
+    it("should support array path input [baseFace, ...subdivisions]", () => {
+      const path = [2, 0, 3, 1, 2, 3];
+      const id = createT4Id(path);
+      const parsed = parseT4Id(id);
+      expect(parsed.baseFace).toBe(2);
+      expect(parsed.subdivisions).toEqual([0, 3, 1, 2, 3]);
+      expect(parsed.zoom).toBe(5);
+
+      // Zoom 0 via single-element array
+      const id0 = createT4Id([1]);
+      const parsed0 = parseT4Id(id0);
+      expect(parsed0.baseFace).toBe(1);
+      expect(parsed0.zoom).toBe(0);
+      expect(parsed0.subdivisions).toEqual([]);
+    });
+
+    it("should support spread / variadic path arguments (...path)", () => {
+      const id = createT4Id(2, 0, 3, 1, 2, 3);
+      const parsed = parseT4Id(id);
+      expect(parsed.baseFace).toBe(2);
+      expect(parsed.subdivisions).toEqual([0, 3, 1, 2, 3]);
+      expect(parsed.zoom).toBe(5);
+
+      // Using the spread operator directly
+      const path = [3, 1, 2];
+      const idSpread = createT4Id(...path);
+      const parsedSpread = parseT4Id(idSpread);
+      expect(parsedSpread.baseFace).toBe(3);
+      expect(parsedSpread.subdivisions).toEqual([1, 2]);
+      expect(parsedSpread.zoom).toBe(2);
+
+      // Zoom 0 via single number
+      const idSingle = createT4Id(2);
+      const parsedSingle = parseT4Id(idSingle);
+      expect(parsedSingle.baseFace).toBe(2);
+      expect(parsedSingle.zoom).toBe(0);
+    });
+
+    it("should support omitting zoom when passing (baseFace, subdivisions)", () => {
+      const id = createT4Id([1, 0, 3, 2]);
+      const parsed = parseT4Id(id);
+      expect(parsed.baseFace).toBe(1);
+      expect(parsed.subdivisions).toEqual([0, 3, 2]);
+      expect(parsed.zoom).toBe(3);
+    });
+
+    it("should support array path in createT4 factory", () => {
+      const cell = createT4([2, 0, 3, 1]);
+      expect(cell.zoom).toBe(3);
+      const parsed = parseT4Id(cell.id);
+      expect(parsed.baseFace).toBe(2);
+      expect(parsed.subdivisions).toEqual([0, 3, 1]);
+    });
+
+    it("should throw on invalid arguments to createT4Id", () => {
+      expect(() => (createT4Id as any)()).toThrow();
+      expect(() => createT4Id([])).toThrow();
+      expect(() => createT4Id([5, 0, 1])).toThrow();
+      expect(() => createT4Id(0, 5)).toThrow();
+    });
+
     it("should shift right by 62 bits to get the base face", () => {
       const face = 3;
-      const id = createT4Id(face, [], 0);
+      const id = createT4Id(face);
       const faceExtracted = Number((id >> 62n) & 3n);
       expect(faceExtracted).toBe(face);
     });
 
     it("should retrieve parent IDs correctly", () => {
-      const id = createT4Id(1, [0, 3, 2], 3);
+      const id = createT4Id([1, 0, 3, 2]);
 
       const parent1 = getParentT4Id(id);
       expect(parent1).not.toBeNull();
@@ -84,10 +140,10 @@ describe("T4 Indexer", () => {
     });
 
     it("should check descendants correctly with isT4Descendant", () => {
-      const parent = createT4Id(1, [0, 3], 2);
-      const child = createT4Id(1, [0, 3, 2, 1], 4);
-      const stranger = createT4Id(1, [0, 2, 2, 1], 4);
-      const otherFace = createT4Id(2, [0, 3, 2, 1], 4);
+      const parent = createT4Id([1, 0, 3]);
+      const child = createT4Id([1, 0, 3, 2, 1]);
+      const stranger = createT4Id([1, 0, 2, 2, 1]);
+      const otherFace = createT4Id([2, 1, 0, 3, 2, 1]);
 
       expect(isT4Descendant(child, parent)).toBe(true);
       expect(isT4Descendant(stranger, parent)).toBe(false);
@@ -95,7 +151,7 @@ describe("T4 Indexer", () => {
       expect(isT4Descendant(parent, child)).toBe(false);
       expect(isT4Descendant(parent, parent)).toBe(false);
 
-      const root = createT4Id(1, [], 0);
+      const root = createT4Id([1]);
       expect(isT4Descendant(child, root)).toBe(true);
       expect(isT4Descendant(otherFace, root)).toBe(false);
     });
@@ -108,7 +164,7 @@ describe("T4 Indexer", () => {
       expect(isValidT4Id((1n << 5n) | 29n)).toBe(false);
 
       // Active bit checking: unused bits in 6..61 must be zero
-      const id = createT4Id(0, [], 0);
+      const id = createT4Id([0]);
       const corruptedId = id | (1n << 9n);
       expect(isValidT4Id(corruptedId)).toBe(false);
     });
@@ -190,7 +246,7 @@ describe("T4 Indexer", () => {
     });
 
     it("should verify that the center of the cell maps back to the same cell", () => {
-      const id = createT4Id(1, [3, 2, 0, 1, 3], 5);
+      const id = createT4Id([1, 0, 3, 2, 1, 3]);
       const center = getT4Center(id, { applyEarthCurvature: true });
 
       const mappedId = latLngToT4(center[1], center[0], 5, { applyEarthCurvature: true });
@@ -206,7 +262,7 @@ describe("T4 Indexer", () => {
 
   describe("Neighbors (Adjacency)", () => {
     it("should return exactly 3 valid neighbors", () => {
-      const id = createT4Id(0, [1, 2, 3], 3);
+      const id = createT4Id([0, 1, 2, 3]);
       const neighbors = getT4Neighbors(id);
 
       expect(neighbors).toHaveLength(3);
@@ -218,7 +274,7 @@ describe("T4 Indexer", () => {
     });
 
     it("should verify that neighbors are adjacent (share 2 vertices)", () => {
-      const id = createT4Id(0, [2, 1], 2);
+      const id = createT4Id([0, 2, 1]);
       const vertices = getT4Vertices(id, { authalicWarp: false });
 
       const neighbors = getT4Neighbors(id);
@@ -240,7 +296,7 @@ describe("T4 Indexer", () => {
 
   describe("Spherical Cell Area", () => {
     it("should calculate valid area for zoom 0 face", () => {
-      const id = createT4Id(0, [], 0);
+      const id = createT4Id(0);
       const area = getT4CellArea(id, 6371.0);
       // Total Earth sphere area = 4 * PI * R^2 ~ 510,064,472 km^2
       // Each base face of regular tetrahedron covers exactly 1/4 of the sphere = ~127,516,118 km^2
@@ -249,13 +305,13 @@ describe("T4 Indexer", () => {
     });
 
     it("should partition area among child cells and decrease with zoom", () => {
-      const id0 = createT4Id(0, [], 0);
+      const id0 = createT4Id(0);
       const a0 = getT4CellArea(id0);
 
-      const c0 = getT4CellArea(createT4Id(0, [0], 1));
-      const c1 = getT4CellArea(createT4Id(0, [1], 1));
-      const c2 = getT4CellArea(createT4Id(0, [2], 1));
-      const c3 = getT4CellArea(createT4Id(0, [3], 1));
+      const c0 = getT4CellArea(createT4Id([0, 0]));
+      const c1 = getT4CellArea(createT4Id([0, 1]));
+      const c2 = getT4CellArea(createT4Id([0, 2]));
+      const c3 = getT4CellArea(createT4Id([0, 3]));
 
       expect(c0).toBeGreaterThan(0);
       expect(c1).toBeGreaterThan(0);
@@ -263,7 +319,7 @@ describe("T4 Indexer", () => {
       expect(c3).toBeGreaterThan(0);
       expect(Math.abs(c0 + c1 + c2 + c3 - a0) / a0).toBeLessThan(0.001);
 
-      const id2 = createT4Id(0, [0, 0], 2);
+      const id2 = createT4Id([0, 0, 0]);
       const a2 = getT4CellArea(id2);
       expect(a2).toBeLessThan(c0);
     });
@@ -282,7 +338,7 @@ describe("T4 Indexer", () => {
     });
 
     it("should return parent, neighbors, and children as cached T4Objects", () => {
-      const id = createT4Id(2, [0, 1, 2], 3);
+      const id = createT4Id([2, 0, 1, 2]);
       const t4 = createT4(id);
 
       const parent = t4.parent;

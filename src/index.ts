@@ -198,6 +198,16 @@ function cacheKeyFor(
 // --- ID Generation & Validation (Fixed 64-bit Layout) ---
 
 /**
+ * Creates a 64-bit T4 BigInt ID from a full path array `[baseFace, ...subdivisions]`.
+ */
+export function createT4Id(path: number[]): bigint;
+
+/**
+ * Creates a 64-bit T4 BigInt ID from variadic path arguments `(baseFace, ...subdivisions)`.
+ */
+export function createT4Id(...path: number[]): bigint;
+
+/**
  * Creates a 64-bit T4 BigInt ID from base face, subdivision path, and zoom level.
  * Bit layout:
  * - Bits 63..62: base face (2 bits)
@@ -205,24 +215,54 @@ function cacheKeyFor(
  * - Bit 5: validity flag (always 1)
  * - Bits 4..0: zoom level (5 bits, 0-28)
  */
-export function createT4Id(baseFace: number, subdivisions: number[], zoom: number): bigint {
+export function createT4Id(...args: (number | number[])[]): bigint {
+  if (args.length === 0) {
+    throw new Error("createT4Id requires at least a base face (0-3)");
+  }
+
+  const first = args[0];
+
+  if (Array.isArray(first)) {
+    // Array form: createT4Id([baseFace, ...subdivisions])
+    const len = first.length;
+    if (len === 0) {
+      throw new Error("Path array must contain at least a base face (0-3)");
+    }
+    const baseFace = first[0];
+    const zoom = len - 1;
+    if (zoom < 0 || zoom > 28) throw new Error("Zoom must be between 0 and 28");
+    if (baseFace < 0 || baseFace > 3 || !Number.isInteger(baseFace)) {
+      throw new Error("Base face must be an integer between 0 and 3");
+    }
+
+    let id = BIGINT_FACES[baseFace];
+    for (let i = 0; i < zoom; ++i) {
+      const sub = first[i + 1];
+      if (sub < 0 || sub > 3 || !Number.isInteger(sub)) {
+        throw new Error(`Subdivision index ${sub} at path position ${i} must be between 0 and 3`);
+      }
+      id |= BIGINT_SUBS[sub] << SUB_SHIFTS[i];
+    }
+    return id | VALID_FLAG | ZOOM_BIGINTS[zoom];
+  }
+
+  // Variadic form: createT4Id(baseFace, ...subdivisions)
+  const baseFace = first as number;
+  const zoom = args.length - 1;
   if (zoom < 0 || zoom > 28) throw new Error("Zoom must be between 0 and 28");
-  if (baseFace < 0 || baseFace > 3) throw new Error("Base face must be between 0 and 3");
-  if (subdivisions.length !== zoom) {
-    throw new Error(`Subdivisions length (${subdivisions.length}) must match zoom level (${zoom})`);
+  if (baseFace < 0 || baseFace > 3 || !Number.isInteger(baseFace)) {
+    throw new Error("Base face must be an integer between 0 and 3");
   }
 
   let id = BIGINT_FACES[baseFace];
   for (let i = 0; i < zoom; ++i) {
-    const sub = subdivisions[i];
-    if (sub < 0 || sub > 3) {
+    const sub = args[i + 1] as number;
+    if (sub < 0 || sub > 3 || !Number.isInteger(sub)) {
       throw new Error(`Subdivision index ${sub} at path position ${i} must be between 0 and 3`);
     }
     id |= BIGINT_SUBS[sub] << SUB_SHIFTS[i];
   }
-
-  id |= VALID_FLAG | ZOOM_BIGINTS[zoom];
-  return id;
+  return id | VALID_FLAG | ZOOM_BIGINTS[zoom];
 }
 
 export interface ParsedT4Id {
@@ -1215,7 +1255,7 @@ export function getT4CellArea(id: bigint, radiusKm = DEFAULT_RADIUS_KM): number 
  * Standard OOP wrapper and memoized factory for T4 cells.
  */
 export function createT4(
-  idOrConfig: bigint | { baseFace: number; subdivisions?: number[]; zoom?: number },
+  idOrConfig: bigint | number[] | { baseFace: number; subdivisions?: number[]; zoom?: number },
   options?: T4Options,
 ): T4Object {
   const radiusKm = options?.radiusKm ?? DEFAULT_RADIUS_KM;
@@ -1226,11 +1266,12 @@ export function createT4(
   let id: bigint;
   if (typeof idOrConfig === "bigint") {
     id = idOrConfig;
+  } else if (Array.isArray(idOrConfig)) {
+    id = createT4Id(idOrConfig);
   } else {
     const baseFace = idOrConfig.baseFace;
     const subdivisions = idOrConfig.subdivisions ?? [];
-    const zoom = idOrConfig.zoom ?? subdivisions.length;
-    id = createT4Id(baseFace, subdivisions, zoom);
+    id = createT4Id(baseFace, ...subdivisions);
   }
 
   const key = cacheKeyFor(id, radiusKm, applyEarthCurvature, authalicWarp, warpFactor);
