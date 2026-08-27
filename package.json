@@ -1,7 +1,7 @@
 {
   "name": "@fimbul-works/t4",
   "description": "An ultra-lightweight hierarchical triangular global grid system (DGGS) mapped to the WGS84 ellipsoid. Fast bitwise spatial indexing with sub-decimeter accuracy at up to 29 zoom levels.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "private": false,
   "license": "MIT",
@@ -70,10 +70,12 @@
     "benchmark:h3": "tsx benchmark_vs_h3.ts",
     "prepublishOnly": "pnpm run build"
   },
+  "dependencies": {
+    "@fimbul-works/vec": "^2.0.2"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@fimbul-works/bundle-size": "^1.0.0",
-    "@fimbul-works/vec": "^2.0.2",
     "@types/node": "^25.9.0",
     "h3-js": "^4.5.0",
     "tsdown": "^0.22.0",

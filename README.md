@@ -112,12 +112,12 @@ Spatial indexing systems involve fundamental geometric trade-offs. T4 was design
 ### 2. Strict Hierarchies & Multi-Resolution Aggregation
 
 - **Exact 1→4 containment** - Every T4 parent is partitioned into exactly four child triangles, with each child fully contained within its parent. This makes the hierarchy geometrically explicit rather than an approximation between resolutions.
-- **$O(1)$ ancestry queries** - Checking whether cell B is a descendant of cell A is a mask comparison against the packed subdivision path.
+- **O(1) ancestry queries** - Checking whether cell B is a descendant of cell A is a mask comparison against the packed subdivision path.
 - **Deterministic hierarchy** - A cell's complete lineage is encoded directly in its ID, allowing parent and child relationships to be derived without external hierarchy tables.
 
 ### 3. Centimeter-Scale Resolution in a Single 64-bit Integer
 
-- **28 zoom levels** - Zoom 28 reaches approximately $\sim 5.5\text{ cm}$ cell width on Earth, while the complete cell address remains encoded in a single 64-bit `BigInt`.
+- **28 zoom levels** - Zoom 28 reaches approximately ~5.5 cm cell width on Earth, while the complete cell address remains encoded in a single 64-bit `BigInt`.
 - **Predictable scaling** - Each additional zoom level quadrisects the cells, providing four times as many cells per level and roughly halving characteristic cell dimensions.
 
 ### 4. Non-Earth Planetary Bodies & Custom Spheres
@@ -142,7 +142,7 @@ Each face recursively quadrisects into 4 child triangles per zoom level: 3 "corn
 
 A T4 ID is a single 64-bit `BigInt` packing:
 - **Bits 63..62**: Base face (0–3)
-- **Bits 61..6**: Fixed-position subdivision indices (2 bits per zoom level, starting with subdivision 0 at bit 60 down to subdivision 27 at bit 6)
+- **Bits 61..6**: Fixed-position subdivision indices (2 bits per zoom level, starting with subdivision 0 at bit 61 down to subdivision 27 at bit 6)
 - **Bit 5**: Validity flag (always 1 for valid IDs)
 - **Bits 4..0**: Zoom level (0–28)
 

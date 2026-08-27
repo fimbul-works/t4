@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@fimbul-works/vec':
+        specifier: ^2.0.2
+        version: 2.0.2
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.15
@@ -14,9 +18,6 @@ importers:
       '@fimbul-works/bundle-size':
         specifier: ^1.0.0
         version: 1.0.0
-      '@fimbul-works/vec':
-        specifier: ^2.0.2
-        version: 2.0.2
       '@types/node':
         specifier: ^25.9.0
         version: 25.9.4
