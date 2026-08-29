@@ -117,7 +117,7 @@ Spatial indexing systems involve fundamental geometric trade-offs. T4 was design
 
 ### 3. Centimeter-Scale Resolution in a Single 64-bit Integer
 
-- **28 zoom levels** - Zoom 28 reaches approximately ~3.88 cm (flat chord) / ~4.53 cm (geodesic arc) cell edge length on Earth (`R = 6371.0` km), while the complete cell address remains encoded in a single 64-bit `BigInt`.
+- **28 zoom levels** - Zoom 28 reaches approximately ~3.88 cm (flat chord) / ~4.53 cm (geodesic arc) cell edge length on Earth (`R = 6371` km), while the complete cell address remains encoded in a single 64-bit `BigInt`.
 - **Predictable scaling** - Each additional zoom level quadrisects the cells, providing four times as many cells per level and roughly halving characteristic cell dimensions.
 
 ### 4. Non-Earth Planetary Bodies & Custom Spheres
@@ -159,10 +159,10 @@ T4 provides **29 discrete resolution levels** (Zoom 0 to Zoom 28):
 - **Zoom 0 (Base Faces)**: Represents the 4 un-subdivided tetrahedral base faces covering the entire globe (0 subdivisions, path `[baseFace]`, length 1).
 - **Zoom 1 to 28 (Subdivisions)**: Each successive zoom level $z$ adds one 2-bit quadrisect subdivision step ($0 \dots 3$). A cell at zoom $z$ contains exactly $z$ subdivisions (path `[baseFace, s0, ... s_{z-1}]`, length $z + 1$).
 - **Resolution Scaling**: Every zoom step quadruples the number of cells ($4^{z+1}$ total cells across the sphere) and halves the characteristic cell edge length:
-  - **Zoom 0**: $\approx 10,404\text{ km}$ flat chord / $\approx 12,173\text{ km}$ geodesic arc
+  - **Zoom 0**: $\approx 10,403\text{ km}$ flat chord / $\approx 12,173\text{ km}$ geodesic arc
   - **Zoom 10**: $\approx 10.2\text{ km}$ flat chord / $\approx 11.9\text{ km}$ geodesic arc
   - **Zoom 20**: $\approx 9.9\text{ m}$ flat chord / $\approx 11.6\text{ m}$ geodesic arc
-  - **Zoom 28**: $\approx 3.88\text{ cm}$ flat chord / $\approx 4.53\text{ cm}$ geodesic arc (28 subdivision steps)
+  - **Zoom 28**: $\approx 3.8\text{ cm}$ flat chord / $\approx 4.5\text{ cm}$ geodesic arc
 
 ### Earth Curvature & Options
 
