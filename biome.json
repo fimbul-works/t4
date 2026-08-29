@@ -1,4 +1,7 @@
 {
+  "files": {
+    "includes": ["**", "!*_t4.json", "!t4_corpus.json", "!benchmarks/**"]
+  },
   "formatter": {
     "indentStyle": "space",
     "indentWidth": 2,

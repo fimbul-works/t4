@@ -11,6 +11,7 @@ import {
   isValidT4Id,
   latLngToT4,
   parseT4Id,
+  getRecommendedT4Zoom,
 } from "./index";
 
 describe("README.md Example Code Verification", () => {
@@ -149,5 +150,16 @@ describe("README.md Example Code Verification", () => {
 
     // Requesting children past maximum zoom
     expect(() => getT4Children(createT4Id(Array(29).fill(0)))).toThrowError("Cannot get children");
+  });
+
+  it("Determining Recommended Zoom Level example works as documented", () => {
+    const zoom = getRecommendedT4Zoom(60.1699, 24.9384);
+    expect(zoom).toBe(21);
+    const id = latLngToT4(60.1699, 24.9384, zoom);
+    expect(isValidT4Id(id)).toBe(true);
+
+    expect(getRecommendedT4Zoom([24.9384, 60.1699])).toBe(21);
+    expect(getRecommendedT4Zoom({ lat: 60.1699, lng: 24.9384 })).toBe(21);
+    expect(getRecommendedT4Zoom("60.169900", "24.938400")).toBe(28);
   });
 });

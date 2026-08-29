@@ -1,29 +1,77 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { ArrayVector2D } from "@fimbul-works/vec";
 import * as h3 from "h3-js";
 import * as T4 from "./src/index";
-import type { ArrayVector2D } from "@fimbul-works/vec";
 
 // ==============================================================================
-// T4 vs Uber H3 Comparative Benchmark Suite
+// T4 vs Uber H3 Head-to-Head Benchmark Suite (Using Full T4 Corpus)
 // ==============================================================================
 
-const SAMPLE_POINTS: ArrayVector2D[] = [
-  [0.0, 0.0], // Null Island
-  [45.0, 45.0], // Mid-lat NE
-  [-45.0, 45.0], // Mid-lat NW
-  [120.0, -35.0], // Southern mid-lat
-  [-120.0, -35.0], // Southern mid-lat W
-  [0.0, 89.0], // Near North Pole
-  [0.0, -89.0], // Near South Pole
-  [179.9, 0.0], // Antimeridian Equator
-  [24.9384, 60.1699], // Helsinki
-  [-74.006, 40.7128], // New York
-  [139.6917, 35.6895], // Tokyo
-  [-0.1278, 51.5074], // London
-  [151.2093, -33.8688], // Sydney
-  [-43.1729, -22.9068], // Rio de Janeiro
-  [37.6173, 55.7558], // Moscow
-  [18.4241, -33.9249], // Cape Town
-];
+interface CorpusRecord {
+  name: string;
+  category?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+  cells: {
+    zoom: number;
+    id: string;
+    hex: string;
+    neighbors: [string, string, string];
+  }[];
+}
+
+// 1. Load dataset from t4_corpus.json (falling back to cities.csv / edge_cases.csv if missing)
+function loadCorpus(): { points: ArrayVector2D[]; t4IdsByZoom: bigint[][] } {
+  const corpusPath = path.resolve("./t4_corpus.json");
+  if (fs.existsSync(corpusPath)) {
+    console.log(`Loading points and test vectors from ${corpusPath}...`);
+    const raw = fs.readFileSync(corpusPath, "utf-8");
+    const records: CorpusRecord[] = JSON.parse(raw);
+    const points: ArrayVector2D[] = new Array(records.length);
+    const t4IdsByZoom: bigint[][] = Array.from({ length: 29 }, () => new Array(records.length));
+
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i];
+      points[i] = [rec.longitude, rec.latitude];
+      for (let z = 0; z <= 28; z++) {
+        t4IdsByZoom[z][i] = BigInt(rec.cells[z].id);
+      }
+    }
+    return { points, t4IdsByZoom };
+  }
+
+  // Fallback if corpus not yet generated
+  console.log("t4_corpus.json not found, falling back to cities.csv...");
+  const citiesPath = path.resolve("./cities.csv");
+  const rawCsv = fs.readFileSync(citiesPath, "utf-8");
+  const lines = rawCsv
+    .split(/\r?\n/)
+    .filter((l) => l.trim().length > 0)
+    .slice(1);
+  const points: ArrayVector2D[] = [];
+
+  for (const line of lines) {
+    const parts = line.split(",");
+    const lat = Number.parseFloat(parts[parts.length - 2]);
+    const lng = Number.parseFloat(parts[parts.length - 1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90) {
+      points.push([lng, lat]);
+    }
+  }
+
+  const t4IdsByZoom: bigint[][] = Array.from({ length: 29 }, () => new Array(points.length));
+  for (let z = 0; z <= 28; z++) {
+    for (let i = 0; i < points.length; i++) {
+      t4IdsByZoom[z][i] = T4.latLngToT4(points[i][1], points[i][0], z);
+    }
+  }
+
+  return { points, t4IdsByZoom };
+}
+
+const { points: SAMPLE_POINTS, t4IdsByZoom } = loadCorpus();
 
 // Equivalent resolution mapping between H3 (0-15) and T4 (0-28)
 // Both span coarse global to sub-meter precision
@@ -36,16 +84,37 @@ const TEST_LEVELS = [
   { label: "Sub-meter / Maximum H3", h3Res: 15, t4Zoom: 25 },
 ];
 
-const WARMUP = 100;
-const ITERS = 1000;
+const WARMUP_PASSES = 1;
+const TIMING_PASSES = 5;
+const SAMPLES = 3;
 
+/**
+ * Runs a benchmark function across all sample points over multiple passes and rounds.
+ */
 function timeOp(fn: () => void): number {
-  for (let w = 0; w < WARMUP; w++) fn();
-  const start = process.hrtime.bigint();
-  for (let i = 0; i < ITERS; i++) fn();
-  const end = process.hrtime.bigint();
-  const elapsedUs = Number(end - start) / 1000.0;
-  return elapsedUs / ITERS;
+  // Warmup pass over all points
+  for (let w = 0; w < WARMUP_PASSES; w++) {
+    fn();
+  }
+
+  let minTimeUs = Infinity;
+
+  // Run multiple rounds and take minimum to filter background OS noise
+  for (let s = 0; s < SAMPLES; s++) {
+    const start = process.hrtime.bigint();
+    for (let i = 0; i < TIMING_PASSES; i++) {
+      fn();
+    }
+    const end = process.hrtime.bigint();
+    const totalOps = TIMING_PASSES * SAMPLE_POINTS.length;
+    const elapsedUs = Number(end - start) / 1000.0;
+    const avgPerOpUs = elapsedUs / totalOps;
+    if (avgPerOpUs < minTimeUs) {
+      minTimeUs = avgPerOpUs;
+    }
+  }
+
+  return minTimeUs;
 }
 
 interface BenchmarkResult {
@@ -69,9 +138,13 @@ function runComparison() {
     "=========================================================================================================",
   );
   console.log(
-    ` Sample Points     : ${SAMPLE_POINTS.length} diverse global coordinates (poles, equator, cities, antimeridian)`,
+    ` Sample Points     : ${SAMPLE_POINTS.length.toLocaleString()} locations from t4_corpus.json (cities + edge cases)`,
   );
-  console.log(` Iterations/test   : ${ITERS} (+ ${WARMUP} warmup)`);
+  console.log(
+    ` Iterations/test   : ${TIMING_PASSES} passes x ${SAMPLES} sample rounds (${(
+      TIMING_PASSES * SAMPLES * SAMPLE_POINTS.length
+    ).toLocaleString()} total executions/test)`,
+  );
   console.log(
     "=========================================================================================================\n",
   );
@@ -81,49 +154,62 @@ function runComparison() {
   for (const lvl of TEST_LEVELS) {
     console.log(`\n--- Benchmark Level: ${lvl.label} (H3 Res ${lvl.h3Res} vs T4 Zoom ${lvl.t4Zoom}) ---`);
 
-    // Prepare indices
-    const t4Ids: bigint[] = SAMPLE_POINTS.map((pt) => T4.latLngToT4(pt[1], pt[0], lvl.t4Zoom));
+    // Prepare indices for this level
+    const t4Ids: bigint[] = t4IdsByZoom[lvl.t4Zoom];
     const h3Indices: string[] = SAMPLE_POINTS.map((pt) => h3.latLngToCell(pt[1], pt[0], lvl.h3Res));
 
-    // 1. Lat/Lng -> Index
-    const t4IndexTime =
-      timeOp(() => {
-        for (let p = 0; p < SAMPLE_POINTS.length; p++) {
-          T4.latLngToT4(SAMPLE_POINTS[p][1], SAMPLE_POINTS[p][0], lvl.t4Zoom);
-        }
-      }) / SAMPLE_POINTS.length;
+    // 1a. Lat/Lng -> Index (Warped - Default)
+    const t4WarpedTime = timeOp(() => {
+      for (let p = 0; p < SAMPLE_POINTS.length; p++) {
+        T4.latLngToT4(SAMPLE_POINTS[p][1], SAMPLE_POINTS[p][0], lvl.t4Zoom);
+      }
+    });
 
-    const h3IndexTime =
-      timeOp(() => {
-        for (let p = 0; p < SAMPLE_POINTS.length; p++) {
-          h3.latLngToCell(SAMPLE_POINTS[p][1], SAMPLE_POINTS[p][0], lvl.h3Res);
-        }
-      }) / SAMPLE_POINTS.length;
+    const h3IndexTime = timeOp(() => {
+      for (let p = 0; p < SAMPLE_POINTS.length; p++) {
+        h3.latLngToCell(SAMPLE_POINTS[p][1], SAMPLE_POINTS[p][0], lvl.h3Res);
+      }
+    });
 
     results.push({
-      operation: "latLng -> ID",
+      operation: "latLng -> ID (warped)",
       level: lvl.label,
-      t4AvgUs: t4IndexTime,
-      t4OpsSec: 1000000.0 / t4IndexTime,
+      t4AvgUs: t4WarpedTime,
+      t4OpsSec: 1000000.0 / t4WarpedTime,
       h3AvgUs: h3IndexTime,
       h3OpsSec: 1000000.0 / h3IndexTime,
-      speedup: h3IndexTime / t4IndexTime,
+      speedup: h3IndexTime / t4WarpedTime,
+    });
+
+    // 1b. Lat/Lng -> Index (Raw - Unwarped)
+    const t4RawTime = timeOp(() => {
+      for (let p = 0; p < SAMPLE_POINTS.length; p++) {
+        T4.latLngToT4(SAMPLE_POINTS[p][1], SAMPLE_POINTS[p][0], lvl.t4Zoom, { authalicWarp: false });
+      }
+    });
+
+    results.push({
+      operation: "latLng -> ID (raw)",
+      level: lvl.label,
+      t4AvgUs: t4RawTime,
+      t4OpsSec: 1000000.0 / t4RawTime,
+      h3AvgUs: h3IndexTime,
+      h3OpsSec: 1000000.0 / h3IndexTime,
+      speedup: h3IndexTime / t4RawTime,
     });
 
     // 2. Index -> Centroid
-    const t4CenterTime =
-      timeOp(() => {
-        for (let p = 0; p < t4Ids.length; p++) {
-          T4.getT4Center(t4Ids[p]);
-        }
-      }) / t4Ids.length;
+    const t4CenterTime = timeOp(() => {
+      for (let p = 0; p < t4Ids.length; p++) {
+        T4.getT4Center(t4Ids[p]);
+      }
+    });
 
-    const h3CenterTime =
-      timeOp(() => {
-        for (let p = 0; p < h3Indices.length; p++) {
-          h3.cellToLatLng(h3Indices[p]);
-        }
-      }) / h3Indices.length;
+    const h3CenterTime = timeOp(() => {
+      for (let p = 0; p < h3Indices.length; p++) {
+        h3.cellToLatLng(h3Indices[p]);
+      }
+    });
 
     results.push({
       operation: "ID -> Centroid",
@@ -136,19 +222,17 @@ function runComparison() {
     });
 
     // 3. Index -> Boundary Vertices
-    const t4BoundaryTime =
-      timeOp(() => {
-        for (let p = 0; p < t4Ids.length; p++) {
-          T4.getT4Vertices(t4Ids[p]);
-        }
-      }) / t4Ids.length;
+    const t4BoundaryTime = timeOp(() => {
+      for (let p = 0; p < t4Ids.length; p++) {
+        T4.getT4Vertices(t4Ids[p]);
+      }
+    });
 
-    const h3BoundaryTime =
-      timeOp(() => {
-        for (let p = 0; p < h3Indices.length; p++) {
-          h3.cellToBoundary(h3Indices[p]);
-        }
-      }) / h3Indices.length;
+    const h3BoundaryTime = timeOp(() => {
+      for (let p = 0; p < h3Indices.length; p++) {
+        h3.cellToBoundary(h3Indices[p]);
+      }
+    });
 
     results.push({
       operation: "ID -> Boundary",
@@ -162,19 +246,17 @@ function runComparison() {
 
     // 4. Index -> Parent
     if (lvl.t4Zoom > 0 && lvl.h3Res > 0) {
-      const t4ParentTime =
-        timeOp(() => {
-          for (let p = 0; p < t4Ids.length; p++) {
-            T4.getParentT4Id(t4Ids[p]);
-          }
-        }) / t4Ids.length;
+      const t4ParentTime = timeOp(() => {
+        for (let p = 0; p < t4Ids.length; p++) {
+          T4.getParentT4Id(t4Ids[p]);
+        }
+      });
 
-      const h3ParentTime =
-        timeOp(() => {
-          for (let p = 0; p < h3Indices.length; p++) {
-            h3.cellToParent(h3Indices[p], lvl.h3Res - 1);
-          }
-        }) / h3Indices.length;
+      const h3ParentTime = timeOp(() => {
+        for (let p = 0; p < h3Indices.length; p++) {
+          h3.cellToParent(h3Indices[p], lvl.h3Res - 1);
+        }
+      });
 
       results.push({
         operation: "ID -> Parent",
@@ -189,19 +271,17 @@ function runComparison() {
 
     // 5. Index -> Children
     if (lvl.t4Zoom < 28 && lvl.h3Res < 15) {
-      const t4ChildrenTime =
-        timeOp(() => {
-          for (let p = 0; p < t4Ids.length; p++) {
-            T4.getT4Children(t4Ids[p]);
-          }
-        }) / t4Ids.length;
+      const t4ChildrenTime = timeOp(() => {
+        for (let p = 0; p < t4Ids.length; p++) {
+          T4.getT4Children(t4Ids[p]);
+        }
+      });
 
-      const h3ChildrenTime =
-        timeOp(() => {
-          for (let p = 0; p < h3Indices.length; p++) {
-            h3.cellToChildren(h3Indices[p], lvl.h3Res + 1);
-          }
-        }) / h3Indices.length;
+      const h3ChildrenTime = timeOp(() => {
+        for (let p = 0; p < h3Indices.length; p++) {
+          h3.cellToChildren(h3Indices[p], lvl.h3Res + 1);
+        }
+      });
 
       results.push({
         operation: "ID -> Children",
@@ -215,19 +295,17 @@ function runComparison() {
     }
 
     // 6. Index -> Neighbors (Ring 1)
-    const t4NeighborTime =
-      timeOp(() => {
-        for (let p = 0; p < t4Ids.length; p++) {
-          T4.getT4Neighbors(t4Ids[p]);
-        }
-      }) / t4Ids.length;
+    const t4NeighborTime = timeOp(() => {
+      for (let p = 0; p < t4Ids.length; p++) {
+        T4.getT4Neighbors(t4Ids[p]);
+      }
+    });
 
-    const h3NeighborTime =
-      timeOp(() => {
-        for (let p = 0; p < h3Indices.length; p++) {
-          h3.gridDisk(h3Indices[p], 1);
-        }
-      }) / h3Indices.length;
+    const h3NeighborTime = timeOp(() => {
+      for (let p = 0; p < h3Indices.length; p++) {
+        h3.gridDisk(h3Indices[p], 1);
+      }
+    });
 
     results.push({
       operation: "ID -> Neighbors",
@@ -240,19 +318,17 @@ function runComparison() {
     });
 
     // 7. Validation
-    const t4ValidTime =
-      timeOp(() => {
-        for (let p = 0; p < t4Ids.length; p++) {
-          T4.isValidT4Id(t4Ids[p]);
-        }
-      }) / t4Ids.length;
+    const t4ValidTime = timeOp(() => {
+      for (let p = 0; p < t4Ids.length; p++) {
+        T4.isValidT4Id(t4Ids[p]);
+      }
+    });
 
-    const h3ValidTime =
-      timeOp(() => {
-        for (let p = 0; p < h3Indices.length; p++) {
-          h3.isValidCell(h3Indices[p]);
-        }
-      }) / h3Indices.length;
+    const h3ValidTime = timeOp(() => {
+      for (let p = 0; p < h3Indices.length; p++) {
+        h3.isValidCell(h3Indices[p]);
+      }
+    });
 
     results.push({
       operation: "isValid",
@@ -265,19 +341,17 @@ function runComparison() {
     });
 
     // 8. Cell Area
-    const t4AreaTime =
-      timeOp(() => {
-        for (let p = 0; p < t4Ids.length; p++) {
-          T4.getT4CellArea(t4Ids[p], 6371.0);
-        }
-      }) / t4Ids.length;
+    const t4AreaTime = timeOp(() => {
+      for (let p = 0; p < t4Ids.length; p++) {
+        T4.getT4CellArea(t4Ids[p]);
+      }
+    });
 
-    const h3AreaTime =
-      timeOp(() => {
-        for (let p = 0; p < h3Indices.length; p++) {
-          h3.cellArea(h3Indices[p], h3.UNITS.km2);
-        }
-      }) / h3Indices.length;
+    const h3AreaTime = timeOp(() => {
+      for (let p = 0; p < h3Indices.length; p++) {
+        h3.cellArea(h3Indices[p], h3.UNITS.km2);
+      }
+    });
 
     results.push({
       operation: "Cell Area",
@@ -301,33 +375,66 @@ function runComparison() {
     "=========================================================================================================",
   );
   console.log(
-    `${"Operation".padEnd(18)} | ${"T4 Avg (µs)".padStart(12)} | ${"T4 Ops/sec".padStart(14)} | ${"H3 Avg (µs)".padStart(12)} | ${"H3 Ops/sec".padStart(14)} | ${"T4 vs H3 Speedup".padStart(18)}`,
+    "Operation".padEnd(22) +
+      " | " +
+      " T4 Avg (µs)".padStart(12) +
+      " | " +
+      "    T4 Ops/sec".padStart(14) +
+      " | " +
+      " H3 Avg (µs)".padStart(12) +
+      " | " +
+      "    H3 Ops/sec".padStart(14) +
+      " | " +
+      "  T4 vs H3 Speedup",
   );
   console.log(
-    "-------------------+--------------+----------------+--------------+----------------+-------------------",
+    "-----------------------+--------------+----------------+--------------+----------------+-------------------",
   );
 
-  const opGroups: Record<string, { t4Total: number; h3Total: number; count: number }> = {};
-  for (const r of results) {
-    if (!opGroups[r.operation]) opGroups[r.operation] = { t4Total: 0, h3Total: 0, count: 0 };
-    opGroups[r.operation].t4Total += r.t4AvgUs;
-    opGroups[r.operation].h3Total += r.h3AvgUs;
-    opGroups[r.operation].count += 1;
-  }
+  const ops = [
+    "latLng -> ID (warped)",
+    "latLng -> ID (raw)",
+    "ID -> Centroid",
+    "ID -> Boundary",
+    "ID -> Parent",
+    "ID -> Children",
+    "ID -> Neighbors",
+    "isValid",
+    "Cell Area",
+  ];
 
-  for (const op of Object.keys(opGroups)) {
-    const g = opGroups[op];
-    const t4Avg = g.t4Total / g.count;
-    const h3Avg = g.h3Total / g.count;
-    const t4Ops = 1000000.0 / t4Avg;
-    const h3Ops = 1000000.0 / h3Avg;
-    const speedup = h3Avg / t4Avg;
-    const speedupStr = `${speedup.toFixed(2)}x ${speedup >= 1.0 ? "FASTER" : "slower"}`;
+  for (const op of ops) {
+    const opResults = results.filter((r) => r.operation === op);
+    if (opResults.length === 0) continue;
+
+    const avgT4 = opResults.reduce((sum, r) => sum + r.t4AvgUs, 0) / opResults.length;
+    const avgH3 = opResults.reduce((sum, r) => sum + r.h3AvgUs, 0) / opResults.length;
+    const t4Ops = 1000000.0 / avgT4;
+    const h3Ops = 1000000.0 / avgH3;
+    const speedup = avgH3 / avgT4;
+
+    const speedupStr =
+      speedup >= 1.05
+        ? `${speedup.toFixed(2)}x FASTER`
+        : speedup <= 0.95
+          ? `${speedup.toFixed(2)}x slower`
+          : "~1.0x (Parity)";
 
     console.log(
-      `${op.padEnd(18)} | ${t4Avg.toFixed(4).padStart(12)} | ${t4Ops.toLocaleString("en-US", { maximumFractionDigits: 0 }).padStart(14)} | ${h3Avg.toFixed(4).padStart(12)} | ${h3Ops.toLocaleString("en-US", { maximumFractionDigits: 0 }).padStart(14)} | ${speedupStr.padStart(18)}`,
+      op.padEnd(22) +
+        " | " +
+        avgT4.toFixed(4).padStart(12) +
+        " | " +
+        Math.round(t4Ops).toLocaleString().padStart(14) +
+        " | " +
+        avgH3.toFixed(4).padStart(12) +
+        " | " +
+        Math.round(h3Ops).toLocaleString().padStart(14) +
+        " | " +
+        speedupStr.padStart(19),
     );
   }
+
   console.log(
     "=========================================================================================================\n",
   );

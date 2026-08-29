@@ -1,53 +1,93 @@
 import { type ArrayVector2D, type ArrayVector3D, normalize3D } from "@fimbul-works/vec";
 
-// WGS84 flattening factor for Earth
+/** WGS84 flattening factor for Earth. */
 export const F_EARTH = 1.0 / 298.257223563;
+
+/** 1.0 minus the square of WGS84 flattening factor for Earth. */
+export const INV_K = (1.0 - F_EARTH) * (1.0 - F_EARTH);
+
+/** Default radius for Earth in kilometers. */
 export const DEFAULT_RADIUS_KM = 6371.0;
 
-// Regular tetrahedron vertices on unit sphere centered at origin
-const sqrt8_9 = Math.sqrt(8.0 / 9.0);
-const sqrt2_9 = Math.sqrt(2.0 / 9.0);
-const sqrt2_3 = Math.sqrt(2.0 / 3.0);
+// Internal constants
+const SQRT8_9 = Math.sqrt(8.0 / 9.0);
+const SQRT2_9 = Math.sqrt(2.0 / 9.0);
+const SQRT2_3 = Math.sqrt(2.0 / 3.0);
 
-const v0: ArrayVector3D = [0.0, 0.0, 1.0];
-const v1: ArrayVector3D = [sqrt8_9, 0.0, -1.0 / 3.0];
-const v2: ArrayVector3D = [-sqrt2_9, sqrt2_3, -1.0 / 3.0];
-const v3: ArrayVector3D = [-sqrt2_9, -sqrt2_3, -1.0 / 3.0];
+// Regular tetrahedron vertices on unit sphere centered at origin
+export const TETRAHEDRA_V0: ArrayVector3D = [0.0, 0.0, 1.0];
+export const TETRAHEDRA_V1: ArrayVector3D = [SQRT8_9, 0.0, -1.0 / 3.0];
+export const TETRAHEDRA_V2: ArrayVector3D = [-SQRT2_9, SQRT2_3, -1.0 / 3.0];
+export const TETRAHEDRA_V3: ArrayVector3D = [-SQRT2_9, -SQRT2_3, -1.0 / 3.0];
 
 // 4 base faces of the tetrahedron (ordered CCW from outside)
 export const BASE_FACES: [ArrayVector3D, ArrayVector3D, ArrayVector3D][] = [
-  [v0, v1, v2], // Face 0
-  [v0, v2, v3], // Face 1
-  [v0, v3, v1], // Face 2
-  [v1, v3, v2], // Face 3
+  [TETRAHEDRA_V0, TETRAHEDRA_V1, TETRAHEDRA_V2], // Face 0
+  [TETRAHEDRA_V0, TETRAHEDRA_V2, TETRAHEDRA_V3], // Face 1
+  [TETRAHEDRA_V0, TETRAHEDRA_V3, TETRAHEDRA_V1], // Face 2
+  [TETRAHEDRA_V1, TETRAHEDRA_V3, TETRAHEDRA_V2], // Face 3
 ];
 
+/**
+ * Precomputed data for each of the 4 base faces of the tetrahedron.
+ * @internal
+ */
 interface BaseFaceData {
+  /** Vertex A x */
   Ax: number;
+  /** Vertex A y */
   Ay: number;
+  /** Vertex A z */
   Az: number;
+  /** Vertex B x */
   Bx: number;
+  /** Vertex B y */
   By: number;
+  /** Vertex B z */
   Bz: number;
+  /** Vertex C x */
   Cx: number;
+  /** Vertex C y */
   Cy: number;
+  /** Vertex C z */
   Cz: number;
+  /** Vector v0 from A to B */
   v0x: number;
+  /** Vector v0 from A to B */
   v0y: number;
+  /** Vector v0 from A to B */
   v0z: number;
+  /** Vector v1 from A to C */
   v1x: number;
+  /** Vector v1 from A to C */
   v1y: number;
+  /** Vector v1 from A to C */
   v1z: number;
+  /** Normal vector of the face */
   nx: number;
+  /** Normal vector of the face */
   ny: number;
+  /** Normal vector of the face */
   nz: number;
+  /** Constant D in the plane equation Ax + By + Cz = D */
   D: number;
+  /** Dot product of v0 with itself */
   d00: number;
+  /** Dot product of v0 with v1 */
   d01: number;
+  /** Dot product of v1 with itself */
   d11: number;
+  /** 1.0 / (d00 * d11 - d01 * d01) */
   invDenom: number;
 }
 
+/**
+ * Computes the base face data for a given face of the tetrahedron.
+ * @param A Vertex A of the face.
+ * @param B Vertex B of the face.
+ * @param C Vertex C of the face.
+ * @returns The base face data.
+ */
 function computeBaseFaceData(A: ArrayVector3D, B: ArrayVector3D, C: ArrayVector3D): BaseFaceData {
   const Ax = A[0],
     Ay = A[1],
@@ -104,106 +144,153 @@ function computeBaseFaceData(A: ArrayVector3D, B: ArrayVector3D, C: ArrayVector3
   };
 }
 
+/** Precomputed base face data for the 4 faces of the tetrahedron. */
 const BASE_FACE_DATA: BaseFaceData[] = [
-  computeBaseFaceData(v0, v1, v2),
-  computeBaseFaceData(v0, v2, v3),
-  computeBaseFaceData(v0, v3, v1),
-  computeBaseFaceData(v1, v3, v2),
+  computeBaseFaceData(TETRAHEDRA_V0, TETRAHEDRA_V1, TETRAHEDRA_V2),
+  computeBaseFaceData(TETRAHEDRA_V0, TETRAHEDRA_V2, TETRAHEDRA_V3),
+  computeBaseFaceData(TETRAHEDRA_V0, TETRAHEDRA_V3, TETRAHEDRA_V1),
+  computeBaseFaceData(TETRAHEDRA_V1, TETRAHEDRA_V3, TETRAHEDRA_V2),
 ];
 
-// Precomputed BigInt constants & lookup tables to eliminate V8 heap allocations in hot paths
+/** Epsilon for floating point comparisons. */
+const EPSILON12 = 1e-12;
+const EPSILON14 = 1e-14;
+
+/** Precomputed BigInt constants & lookup tables to eliminate V8 heap allocations in hot paths. */
 const BIGINT_SUBS = [0n, 1n, 2n, 3n];
 const BIGINT_FACES = [0n << 62n, 1n << 62n, 2n << 62n, 3n << 62n];
 const VALID_FLAG = 1n << 5n;
 
-// Precomputed subdivision bit shifts: SUB_SHIFTS[i] = 60n - 2n * i (for i = 0..27)
+/** Precomputed subdivision bit shifts: SUB_SHIFTS[i] = 60n - 2n * i (for i = 0..27). */
 const SUB_SHIFTS: bigint[] = new Array(28);
 for (let i = 0; i < 28; i++) {
   SUB_SHIFTS[i] = BigInt(60 - 2 * i);
 }
 
-// Precomputed unused bit masks for validation: UNUSED_MASKS[zoom]
+/** Precomputed unused bit masks for validation: UNUSED_MASKS[zoom]. */
 const UNUSED_MASKS: bigint[] = new Array(29);
 for (let z = 0; z <= 28; z++) {
   const unusedBits = 2 * (28 - z);
   UNUSED_MASKS[z] = unusedBits > 0 ? ((1n << BigInt(unusedBits)) - 1n) << 6n : 0n;
 }
 
-// Precomputed descendant masks: DESCENDANT_MASKS[parentZoom]
+/** Precomputed descendant masks: DESCENDANT_MASKS[parentZoom]. */
 const DESCENDANT_MASKS: bigint[] = new Array(29);
 for (let pz = 0; pz <= 28; pz++) {
   const bits = 2 * pz;
   DESCENDANT_MASKS[pz] = bits > 0 ? ((1n << BigInt(bits)) - 1n) << BigInt(62 - bits) : 0n;
 }
 
-// Precomputed parent clearing masks: PARENT_CLEAR_MASKS[newZoom] = ~(3n << SUB_SHIFTS[newZoom])
+/** Precomputed parent clearing masks: PARENT_CLEAR_MASKS[newZoom] = ~(3n << SUB_SHIFTS[newZoom]). */
 const PARENT_CLEAR_MASKS: bigint[] = new Array(28);
 for (let nz = 0; nz < 28; nz++) {
   PARENT_CLEAR_MASKS[nz] = ~(3n << SUB_SHIFTS[nz]);
 }
 
-// Precomputed zoom BigInts: ZOOM_BIGINTS[zoom] = BigInt(zoom)
+/** Precomputed zoom BigInts: ZOOM_BIGINTS[zoom] = BigInt(zoom). */
 const ZOOM_BIGINTS: bigint[] = new Array(29);
 for (let z = 0; z <= 28; z++) {
   ZOOM_BIGINTS[z] = BigInt(z);
 }
 
+/**
+ * Options for creating a T4Object.
+ */
 export interface T4Options {
-  radiusKm?: number;
-  applyEarthCurvature?: boolean;
-  authalicWarp?: boolean;
-  warpFactor?: number;
+  /** Planet radius in kilometers. Defaults to Earth's radius. */
+  readonly radiusKm?: number;
+  /** Whether to apply Earth curvature correction. Defaults to true. */
+  readonly applyEarthCurvature?: boolean;
+  /** Whether the cell is warped to the sphere's surface (authalic warp). Defaults to true. */
+  readonly authalicWarp?: boolean;
 }
 
-export interface T4Object {
+/**
+ * A traversable T4 cell.
+ */
+export interface T4Cell {
+  /** The T4 ID of this cell. */
   readonly id: bigint;
+  /** The zoom level of this cell. */
   readonly zoom: number;
+  /** The radius of the sphere in kilometers. */
   readonly radiusKm: number;
+  /** Whether to apply Earth curvature correction. */
   readonly applyEarthCurvature: boolean;
+  /** Whether the cell is warped to the sphere's surface (authalic warp). */
   readonly authalicWarp: boolean;
-  readonly warpFactor: number;
+  /** The 2D vertices of the cell (longitude, latitude) in degrees. */
   readonly vertices: [ArrayVector2D, ArrayVector2D, ArrayVector2D];
+  /** The 2D center of the cell (longitude, latitude) in degrees. */
   readonly center: ArrayVector2D;
+  /** The 2D vertices of the cell (longitude, latitude) in the flat tetrahedral domain. */
   readonly vertices2D: [ArrayVector2D, ArrayVector2D, ArrayVector2D];
+  /** The 2D center of the cell (longitude, latitude) in the flat tetrahedral domain. */
   readonly center2D: ArrayVector2D;
+  /** The 3D vertices of the cell (x, y, z) in Cartesian coordinates. */
   readonly vertices3D: [ArrayVector3D, ArrayVector3D, ArrayVector3D];
+  /** The 3D center of the cell (x, y, z) in Cartesian coordinates. */
   readonly center3D: ArrayVector3D;
+  /** The area of the cell. */
   readonly area: number;
-  readonly parent: T4Object | null;
-  readonly neighbors: [T4Object, T4Object, T4Object];
-  readonly children: [T4Object, T4Object, T4Object, T4Object];
-  getChildren(): [T4Object, T4Object, T4Object, T4Object];
+  /** The parent cell of this cell. */
+  readonly parent: T4Cell | null;
+  /** The neighbors of this cell (adjacent cells sharing an edge). */
+  readonly neighbors: [T4Cell, T4Cell, T4Cell];
+  /** The children of this cell (four sub-cells). */
+  readonly children: [T4Cell, T4Cell, T4Cell, T4Cell];
+  /** The IDs of the children of this cell. */
   readonly childIds: [bigint, bigint, bigint, bigint];
-  isDescendantOf(parent: T4Object | bigint): boolean;
+  /** Check if this cell is a descendant of the given parent cell or ID. */
+  isDescendantOf(parent: T4Cell | bigint): boolean;
 }
 
 // Instance cache to reuse T4Object instances (using WeakRefs to prevent leaks).
-const instanceCache = new Map<string, WeakRef<T4Object>>();
+interface CacheFinalizerToken {
+  optionsKey: string;
+  id: bigint;
+}
 
-const cacheFinalizer = new FinalizationRegistry((key: string) => {
-  const ref = instanceCache.get(key);
-  if (ref && !ref.deref()) instanceCache.delete(key);
+const optionsCache = new Map<string, Map<bigint, WeakRef<T4Cell>>>();
+
+const cacheFinalizer = new FinalizationRegistry<CacheFinalizerToken>((token) => {
+  const subMap = optionsCache.get(token.optionsKey);
+  if (subMap) {
+    const ref = subMap.get(token.id);
+    if (ref && !ref.deref()) {
+      subMap.delete(token.id);
+      if (subMap.size === 0) {
+        optionsCache.delete(token.optionsKey);
+      }
+    }
+  }
 });
 
-function cacheKeyFor(
-  id: bigint,
-  radiusKm: number,
-  applyEarthCurvature: boolean,
-  authalicWarp: boolean,
-  warpFactor: number,
-): string {
-  return `${id}|${radiusKm}|${applyEarthCurvature}|${authalicWarp}|${warpFactor}`;
-}
+/**
+ * Generates a cache key for the given options.
+ * @param radiusKm Planet radius in kilometers.
+ * @param applyEarthCurvature Whether to apply Earth curvature correction.
+ * @param authalicWarp Whether the cell is warped to the sphere's surface (authalic warp).
+ * @returns A unique cache key.
+ */
+const getOptionsKey = (radiusKm: number, applyEarthCurvature: boolean, authalicWarp: boolean): string =>
+  `${radiusKm}|${applyEarthCurvature}|${authalicWarp}`;
 
 // --- ID Generation & Validation (Fixed 64-bit Layout) ---
 
 /**
  * Creates a 64-bit T4 BigInt ID from a full path array `[baseFace, ...subdivisions]`.
+ * @param path Array containing the base face (0-3) followed by subdivision codes (0-3).
+ * @returns The 64-bit T4 ID.
+ * @throws Error if the path is empty or invalid.
  */
 export function createT4Id(path: number[]): bigint;
 
 /**
  * Creates a 64-bit T4 BigInt ID from variadic path arguments `(baseFace, ...subdivisions)`.
+ * @param path Subdivision path [baseFace, ...subdivisions]
+ * @returns The 64-bit T4 ID.
+ * @throws Error if the path is invalid.
  */
 export function createT4Id(...path: number[]): bigint;
 
@@ -211,7 +298,7 @@ export function createT4Id(...path: number[]): bigint;
  * Creates a 64-bit T4 BigInt ID from base face, subdivision path, and zoom level.
  * Bit layout:
  * - Bits 63..62: base face (2 bits)
- * - Bits 61..6: subdivisions (2 bits each from step 0 at bit 60 down to step 27 at bit 6)
+ * - Bits 61..6: subdivisions (2 bits each; subdivision 0 at bits 61..60 down to subdivision 27 at bits 7..6)
  * - Bit 5: validity flag (always 1)
  * - Bits 4..0: zoom level (5 bits, 0-28)
  */
@@ -265,30 +352,39 @@ export function createT4Id(...args: (number | number[])[]): bigint {
   return id | VALID_FLAG | ZOOM_BIGINTS[zoom];
 }
 
+/**
+ * A parsed T4 ID.
+ */
 export interface ParsedT4Id {
-  baseFace: number;
-  subdivisions: number[];
-  zoom: number;
-  isValid: boolean;
+  /** The base face of the T4 ID. */
+  readonly baseFace: number;
+  /** The subdivisions of the T4 ID. */
+  readonly subdivisions: readonly number[];
+  /** The zoom level of the T4 ID. */
+  readonly zoom: number;
+  /** Whether the T4 ID is valid. */
+  readonly isValid: boolean;
 }
 
 /**
  * Parses a T4 BigInt ID into its face, subdivisions array, zoom, and validity flag.
+ * @param id The T4 BigInt ID to parse.
+ * @returns A ParsedT4Id object containing the face, subdivisions, zoom, and validity flag.
  */
 export function parseT4Id(id: bigint): ParsedT4Id {
   if (typeof id !== "bigint" || id < 0n || id >> 64n !== 0n) {
-    return { baseFace: 0, subdivisions: [], zoom: 0, isValid: false };
+    throw new Error(`Invalid T4 ID ${id}`);
   }
 
   const zoom = Number(id & 0x1fn);
   const isValid = ((id >> 5n) & 1n) === 1n;
 
   if (!isValid || zoom > 28 || zoom < 0) {
-    return { baseFace: 0, subdivisions: [], zoom: 0, isValid: false };
+    throw new Error(`Invalid T4 ID ${id}`);
   }
 
   if ((id & UNUSED_MASKS[zoom]) !== 0n) {
-    return { baseFace: 0, subdivisions: [], zoom: 0, isValid: false };
+    throw new Error(`Invalid T4 ID ${id}`);
   }
 
   const baseFace = Number((id >> 62n) & 3n);
@@ -302,6 +398,8 @@ export function parseT4Id(id: bigint): ParsedT4Id {
 
 /**
  * Validates whether a BigInt represents a valid 64-bit T4 ID.
+ * @param id The T4 BigInt ID to validate.
+ * @returns True if the T4 ID is valid, false otherwise.
  */
 export function isValidT4Id(id: bigint): boolean {
   if (typeof id !== "bigint" || id < 0n || id >> 64n !== 0n) {
@@ -318,14 +416,21 @@ export function isValidT4Id(id: bigint): boolean {
 
 /**
  * Gets the parent T4 ID by clearing the lowest subdivision bits and decrementing zoom.
+ * @param id The T4 BigInt ID to get the parent of.
+ * @returns The parent T4 ID, or null if the given id is a valid zoom-0 cell (base face).
+ * @throws Error if the given id is not a valid T4 ID.
  */
 export function getParentT4Id(id: bigint): bigint | null {
-  const zoom = Number(id & 0x1fn);
-  if (((id >> 5n) & 1n) !== 1n || zoom <= 0 || zoom > 28) {
-    return null;
+  if (typeof id !== "bigint" || id < 0n || id >> 64n !== 0n) {
+    throw new Error("Invalid T4 ID");
   }
 
-  if ((id & UNUSED_MASKS[zoom]) !== 0n) {
+  const zoom = Number(id & 0x1fn);
+  if (((id >> 5n) & 1n) !== 1n || zoom > 28 || (id & UNUSED_MASKS[zoom]) !== 0n) {
+    throw new Error("Invalid T4 ID");
+  }
+
+  if (zoom === 0) {
     return null;
   }
 
@@ -335,15 +440,22 @@ export function getParentT4Id(id: bigint): bigint | null {
 
 /**
  * Gets the 4 child T4 IDs by setting the subdivision at zoom level and incrementing zoom.
+ * @param id The T4 BigInt ID to get the children of.
+ * @returns An array of 4 T4 BigInt IDs representing the children of the given id.
+ * @throws Error if the given id is not a valid T4 ID or if maximum zoom level (28) is reached.
  */
 export function getT4Children(id: bigint): [bigint, bigint, bigint, bigint] {
-  const zoom = Number(id & 0x1fn);
-  if (((id >> 5n) & 1n) !== 1n || zoom >= 28 || zoom < 0) {
-    throw new Error("Cannot get children for invalid ID or max zoom level reached");
+  if (typeof id !== "bigint" || id < 0n || id >> 64n !== 0n) {
+    throw new Error("Invalid T4 ID");
   }
 
-  if ((id & UNUSED_MASKS[zoom]) !== 0n) {
-    throw new Error("Cannot get children for invalid ID");
+  const zoom = Number(id & 0x1fn);
+  if (((id >> 5n) & 1n) !== 1n || zoom > 28 || (id & UNUSED_MASKS[zoom]) !== 0n) {
+    throw new Error("Invalid T4 ID");
+  }
+
+  if (zoom >= 28) {
+    throw new Error("Cannot get children: max zoom level 28 reached");
   }
 
   const newZoom = zoom + 1;
@@ -355,6 +467,9 @@ export function getT4Children(id: bigint): [bigint, bigint, bigint, bigint] {
 
 /**
  * Checks whether childId is a descendant of parentId in $O(1)$ bit comparisons.
+ * @param childId The child T4 BigInt ID.
+ * @param parentId The parent T4 BigInt ID.
+ * @returns True if the childId is a descendant of the parentId, false otherwise.
  */
 export function isT4Descendant(childId: bigint, parentId: bigint): boolean {
   if (typeof childId !== "bigint" || typeof parentId !== "bigint") {
@@ -388,10 +503,104 @@ export function isT4Descendant(childId: bigint, parentId: bigint): boolean {
   return (childId & mask) === (parentId & mask);
 }
 
+// --- Coordinate Precision & Recommended Zoom ---
+
+/**
+ * Counts the number of significant decimal places in a number or numeric string.
+ * @internal
+ */
+function countDecimals(val: number | string): number {
+  if (typeof val === "number") {
+    if (!Number.isFinite(val)) return 0;
+    if (Math.floor(val) === val) return 0;
+    const str = val.toString();
+    if (str.includes("e-")) {
+      return Number.parseInt(str.split("e-")[1], 10);
+    }
+    const dot = str.indexOf(".");
+    return dot === -1 ? 0 : str.length - dot - 1;
+  }
+  const s = String(val).trim();
+  const dot = s.indexOf(".");
+  return dot === -1 ? 0 : s.length - dot - 1;
+}
+
+/**
+ * Calculates the recommended T4 zoom level (0..28) for a given GPS coordinate pair
+ * based on its floating-point precision and geographical latitude.
+ *
+ * Automatically accounts for meridian convergence at higher latitudes, where
+ * longitude degrees span fewer physical meters on the spherical surface.
+ *
+ * @param lat Latitude in degrees (number, numeric string, [lng, lat] vector, or { lat, lng } object).
+ * @param lng Longitude in degrees (number or numeric string).
+ * @returns An integer zoom level between 0 and 28.
+ *
+ * @example
+ * getRecommendedT4Zoom(60.1699, 24.9384); // 21 (~5.2 m resolution for 4 decimals in Helsinki)
+ * getRecommendedT4Zoom(0, 0); // 7 (~85 km resolution for integer degrees)
+ * getRecommendedT4Zoom([24.9384, 60.1699]); // 21
+ */
+export function getRecommendedT4Zoom(
+  lat: number | string | ArrayVector2D | { lat: number; lng: number } | { latitude: number; longitude: number },
+  lng?: number | string,
+  radiusKm = DEFAULT_RADIUS_KM,
+): number {
+  let latVal: number | string;
+  let lngVal: number | string;
+
+  if (Array.isArray(lat)) {
+    lngVal = lat[0];
+    latVal = lat[1];
+  } else if (typeof lat === "object" && lat !== null) {
+    if ("lat" in lat && "lng" in lat) {
+      latVal = lat.lat;
+      lngVal = lat.lng;
+    } else if ("latitude" in lat && "longitude" in lat) {
+      latVal = (lat as { latitude: number; longitude: number }).latitude;
+      lngVal = (lat as { latitude: number; longitude: number }).longitude;
+    } else {
+      latVal = 0;
+      lngVal = 0;
+    }
+  } else {
+    latVal = lat;
+    lngVal = lng ?? 0;
+  }
+
+  const dLat = countDecimals(latVal);
+  const dLng = countDecimals(lngVal);
+  const radiusScale = radiusKm > 0 ? radiusKm / DEFAULT_RADIUS_KM : 1.0;
+
+  // ~85 km cell on Earth for 1-degree whole integer precision
+  if (dLat === 0 && dLng === 0) {
+    return 7 * radiusScale;
+  }
+
+  const numLat = typeof latVal === "number" ? latVal : Number.parseFloat(String(latVal));
+  const safeLat = Number.isFinite(numLat) ? Math.max(-90, Math.min(90, numLat)) : 0;
+  const latRad = (safeLat * Math.PI) / 180.0;
+  const cosLat = Math.max(0.001, Math.abs(Math.cos(latRad)));
+
+  const latM = Math.pow(10, -dLat) * 111139.0 * radiusScale;
+  const lngM = Math.pow(10, -dLng) * 111320.0 * cosLat * radiusScale;
+
+  // The effective precision scale in meters (finer dimension)
+  const precisionM = Math.min(latM, lngM);
+
+  // Root tetrahedron edge span on sphere
+  const rootEdgeM = 10915000.0 * radiusScale;
+  const z = Math.ceil(Math.log2(rootEdgeM / precisionM));
+  return Math.max(0, Math.min(28, z));
+}
+
 // --- Geodetic & Geocentric Conversions ---
 
 /**
  * Converts geocentric Cartesian coordinates [x, y, z] to geodetic GPS [lng, lat] (degrees).
+ * @param xyz The geocentric Cartesian coordinates [x, y, z].
+ * @param applyEarthCurvature Whether to apply Earth curvature correction.
+ * @returns A 2-element array containing longitude and latitude in degrees.
  */
 export function geocentricToGeodetic(xyz: ArrayVector3D, applyEarthCurvature = true): ArrayVector2D {
   const x = xyz[0];
@@ -407,8 +616,7 @@ export function geocentricToGeodetic(xyz: ArrayVector3D, applyEarthCurvature = t
   let latRad: number;
 
   if (applyEarthCurvature) {
-    const invK = (1.0 - F_EARTH) * (1.0 - F_EARTH);
-    latRad = Math.atan2(z / invK, Math.sqrt(d2d));
+    latRad = Math.atan2(z / INV_K, Math.sqrt(d2d));
   } else {
     latRad = Math.atan2(z, Math.sqrt(d2d));
   }
@@ -418,17 +626,23 @@ export function geocentricToGeodetic(xyz: ArrayVector3D, applyEarthCurvature = t
 
 /**
  * Converts geodetic GPS [lng, lat] (degrees) to geocentric unit Cartesian coordinates [x, y, z].
+ * @param lngLat The geodetic GPS coordinates [longitude, latitude] in degrees.
+ * @param applyEarthCurvature Whether to apply Earth curvature correction.
+ * @returns A 3-element array containing unit Cartesian coordinates [x, y, z].
  */
 export function geodeticToGeocentric(lngLat: ArrayVector2D, applyEarthCurvature = true): ArrayVector3D {
   const lng = lngLat[0];
   const lat = lngLat[1];
+
+  if (lat >= 90.0) return [0.0, 0.0, 1.0];
+  if (lat <= -90.0) return [0.0, 0.0, -1.0];
+
   const lngRad = (lng * Math.PI) / 180.0;
   const latRad = (lat * Math.PI) / 180.0;
 
   let latGeocentric: number;
   if (applyEarthCurvature) {
-    const invK = (1.0 - F_EARTH) * (1.0 - F_EARTH);
-    latGeocentric = Math.atan2(invK * Math.sin(latRad), Math.cos(latRad));
+    latGeocentric = Math.atan2(INV_K * Math.sin(latRad), Math.cos(latRad));
   } else {
     latGeocentric = latRad;
   }
@@ -441,11 +655,17 @@ export function geodeticToGeocentric(lngLat: ArrayVector2D, applyEarthCurvature 
 
 /**
  * Gets the vertices of the T4 cell in flat 3D space on the tetrahedron face.
+ * @param id The T4 BigInt ID to get the vertices of.
+ * @returns An array of 3 T4Object arrays representing the vertices of the cell.
+ * @throws Error if the given id is not a valid T4 ID.
  */
 export function getT4VerticesFlat(id: bigint): [ArrayVector3D, ArrayVector3D, ArrayVector3D] {
+  if (typeof id !== "bigint" || id < 0n || id >> 64n !== 0n) {
+    throw new Error("Invalid T4 ID");
+  }
+
   const zoom = Number(id & 0x1fn);
-  const isValid = ((id >> 5n) & 1n) === 1n;
-  if (!isValid || zoom > 28 || zoom < 0) {
+  if (((id >> 5n) & 1n) !== 1n || zoom > 28 || (id & UNUSED_MASKS[zoom]) !== 0n) {
     throw new Error("Invalid T4 ID");
   }
 
@@ -516,25 +736,41 @@ export function getT4VerticesFlat(id: bigint): [ArrayVector3D, ArrayVector3D, Ar
 
 // --- Authalic Corner Warp & Inversion ---
 
+/**
+ * Applies the authalic corner warp to a value.
+ * @param x The value to apply the warp to.
+ * @returns The warped value.
+ */
 function authalicWarpG(xIn: number): number {
   const x = Math.max(1e-7, Math.min(1.0, xIn));
   const xc = x - 1.0 / 3.0;
   const poly = 1.0 - 0.5 * xc + 0.35 * xc * xc + 0.3 * xc * xc * xc;
   const sqrtX = Math.sqrt(x);
-  const fourthRootX = Math.sqrt(sqrtX);
-  return sqrtX * fourthRootX * poly;
+  return sqrtX * Math.sqrt(sqrtX) * poly;
 }
 
-let gInvPrime = 1.0;
+interface AuthalicGInvResult {
+  x: number;
+  gPrime: number;
+}
 
-function authalicWarpGInv(y: number): number {
+const G_INV_RESULT: AuthalicGInvResult = { x: 0.0, gPrime: 1.0 };
+
+/**
+ * Inverts the authalic corner warp.
+ * @param y The warped value to invert.
+ * @returns An object containing the original value and the derivative of the warp.
+ */
+function authalicWarpGInv(y: number): AuthalicGInvResult {
   if (y <= 0.0) {
-    gInvPrime = 1.0;
-    return 0.0;
+    G_INV_RESULT.x = 0.0;
+    G_INV_RESULT.gPrime = 1.0;
+    return G_INV_RESULT;
   }
 
   // Initial estimate x0 = y^(4/3) = y * cbrt(y)
   let x = Math.max(1e-7, Math.min(1.0, y * Math.cbrt(y)));
+  let gp = 1.0;
 
   for (let iter = 0; iter < 4; ++iter) {
     const xc = x - 1.0 / 3.0;
@@ -546,18 +782,18 @@ function authalicWarpGInv(y: number): number {
     const xPowGammaMinus1 = 1.0 / fourthRootX;
 
     const gVal = xPowGamma * poly;
-    const gp = xPowGammaMinus1 * (0.75 * poly + x * polyDeriv);
-    gInvPrime = gp;
+    gp = xPowGammaMinus1 * (0.75 * poly + x * polyDeriv);
 
     const diff = gVal - y;
-    if (Math.abs(diff) < 1e-12 || Math.abs(gp) < 1e-12) {
-      gInvPrime = gp > 1e-12 ? gp : 1e-12;
-      return x;
+    if (Math.abs(diff) < EPSILON12 || Math.abs(gp) < EPSILON12) {
+      G_INV_RESULT.x = x;
+      G_INV_RESULT.gPrime = gp > EPSILON12 ? gp : EPSILON12;
+      return G_INV_RESULT;
     }
 
     const step = diff / gp;
     x = Math.max(1e-7, Math.min(1.0, x - step));
-    if (Math.abs(step) < 1e-12) {
+    if (Math.abs(step) < EPSILON12) {
       break;
     }
   }
@@ -568,12 +804,20 @@ function authalicWarpGInv(y: number): number {
   const sqrtX = Math.sqrt(x);
   const fourthRootX = Math.sqrt(sqrtX);
   const xPowGammaMinus1 = 1.0 / fourthRootX;
-  const gp = xPowGammaMinus1 * (0.75 * poly + x * polyDeriv);
-  gInvPrime = gp < 1e-12 ? 1e-12 : gp;
-  return x;
+  gp = xPowGammaMinus1 * (0.75 * poly + x * polyDeriv);
+  G_INV_RESULT.x = x;
+  G_INV_RESULT.gPrime = gp < EPSILON12 ? EPSILON12 : gp;
+  return G_INV_RESULT;
 }
 
-function unwarpAuthalicCornerInternal(uIn: number, vIn: number, wIn: number): [number, number, number] {
+/**
+ * Unwarps authalic corner values.
+ * @param uIn The first warped authalic corner value.
+ * @param vIn The second warped authalic corner value.
+ * @param wIn The third warped authalic corner value.
+ * @returns An array containing the three unwarped authalic corner values.
+ */
+function unwarpAuthalicCornerInternal(uIn: number, vIn: number, wIn: number): ArrayVector3D {
   const uw = Math.max(0.0, Math.min(1.0, uIn));
   const vw = Math.max(0.0, Math.min(1.0, vIn));
   const ww = Math.max(0.0, Math.min(1.0, wIn));
@@ -587,16 +831,21 @@ function unwarpAuthalicCornerInternal(uIn: number, vIn: number, wIn: number): [n
     vf = 0.0,
     wf = 0.0;
 
-  for (let iter = 0; iter < 8; ++iter) {
-    uf = authalicWarpGInv(lambda * uw);
-    const duRaw = gInvPrime;
-    vf = authalicWarpGInv(lambda * vw);
-    const dvRaw = gInvPrime;
-    wf = authalicWarpGInv(lambda * ww);
-    const dwRaw = gInvPrime;
+  for (let iter = 0; iter < 5; ++iter) {
+    authalicWarpGInv(lambda * uw);
+    uf = G_INV_RESULT.x;
+    const duRaw = G_INV_RESULT.gPrime;
+
+    authalicWarpGInv(lambda * vw);
+    vf = G_INV_RESULT.x;
+    const dvRaw = G_INV_RESULT.gPrime;
+
+    authalicWarpGInv(lambda * ww);
+    wf = G_INV_RESULT.x;
+    const dwRaw = G_INV_RESULT.gPrime;
 
     const F = uf + vf + wf - 1.0;
-    if (Math.abs(F) < 1e-12) {
+    if (Math.abs(F) < EPSILON12) {
       break;
     }
 
@@ -606,12 +855,12 @@ function unwarpAuthalicCornerInternal(uIn: number, vIn: number, wIn: number): [n
       if (lambda < lambdaHigh) lambdaHigh = lambda;
     }
 
-    const du = duRaw > 1e-12 ? duRaw : 1e-12;
-    const dv = dvRaw > 1e-12 ? dvRaw : 1e-12;
-    const dw = dwRaw > 1e-12 ? dwRaw : 1e-12;
+    const du = duRaw > EPSILON12 ? duRaw : EPSILON12;
+    const dv = dvRaw > EPSILON12 ? dvRaw : EPSILON12;
+    const dw = dwRaw > EPSILON12 ? dwRaw : EPSILON12;
 
     const FPrime = uw / du + vw / dv + ww / dw;
-    if (FPrime > 1e-12) {
+    if (FPrime > EPSILON12) {
       const nextLambda = lambda - F / FPrime;
       if (nextLambda > lambdaLow && nextLambda < lambdaHigh) {
         lambda = nextLambda;
@@ -630,18 +879,41 @@ function unwarpAuthalicCornerInternal(uIn: number, vIn: number, wIn: number): [n
   if (sum <= 1e-9) {
     return [uw, vw, ww];
   }
-  return [uf / sum, vf / sum, wf / sum];
+  let outU = uf / sum;
+  let outV = vf / sum;
+  let outW = wf / sum;
+
+  if (Math.abs(uw - vw) < EPSILON14) {
+    outU = outV = 0.5 * (outU + outV);
+  }
+  if (Math.abs(vw - ww) < EPSILON14) {
+    outV = outW = 0.5 * (outV + outW);
+  }
+  if (Math.abs(ww - uw) < EPSILON14) {
+    outW = outU = 0.5 * (outW + outU);
+  }
+
+  return [outU, outV, outW];
 }
 
 /**
  * Inverts the authalic corner warp on barycentric coordinates.
+ * @param baryW The barycentric coordinates [u, v, w].
+ * @returns An ArrayVector3D containing the three unwarped authalic corner values.
  */
 export function unwarpAuthalicCorner(baryW: ArrayVector3D): ArrayVector3D {
-  const [u, v, w] = unwarpAuthalicCornerInternal(baryW[0], baryW[1], baryW[2]);
-  return [u, v, w];
+  return unwarpAuthalicCornerInternal(baryW[0], baryW[1], baryW[2]);
 }
 
-function getBarycentricFast(qx: number, qy: number, qz: number, face: number): [number, number, number] {
+/**
+ * Get the barycentric coordinates of a point on a face.
+ * @param qx The x-coordinate of the point.
+ * @param qy The y-coordinate of the point.
+ * @param qz The z-coordinate of the point.
+ * @param face The face index.
+ * @returns An ArrayVector3D containing the three barycentric coordinates [u, v, w].
+ */
+function getBarycentricFast(qx: number, qy: number, qz: number, face: number): ArrayVector3D {
   const fd = BASE_FACE_DATA[face];
   const v2x = qx - fd.Ax;
   const v2y = qy - fd.Ay;
@@ -654,6 +926,14 @@ function getBarycentricFast(qx: number, qy: number, qz: number, face: number): [
   return [u, v, w];
 }
 
+/**
+ * Calculate the intersection of a ray with a face.
+ * @param px The x-coordinate of the ray origin.
+ * @param py The y-coordinate of the ray origin.
+ * @param pz The z-coordinate of the ray origin.
+ * @param face The face index.
+ * @returns An object containing the hit status and the intersection point.
+ */
 function getRayFaceIntersectionFast(
   px: number,
   py: number,
@@ -662,7 +942,7 @@ function getRayFaceIntersectionFast(
 ): { hit: boolean; x: number; y: number; z: number } {
   const fd = BASE_FACE_DATA[face];
   const denom = px * fd.nx + py * fd.ny + pz * fd.nz;
-  if (denom <= 1e-12) {
+  if (denom <= EPSILON12) {
     return { hit: false, x: 0, y: 0, z: 0 };
   }
   const t = fd.D / denom;
@@ -671,13 +951,16 @@ function getRayFaceIntersectionFast(
 
 /**
  * Projects a flat point on a tetrahedron base face using the authalic corner warp.
+ * @param flatPt The point to project.
+ * @param baseFaceIndex The base face index.
+ * @returns The projected point.
  */
-export function projectAuthalicCornerWarp(
-  flatPt: ArrayVector3D,
-  baseFaceIndex: number,
-  warpFactor = 1.0,
-): ArrayVector3D {
-  const faceIdx = (baseFaceIndex & 3) % 4;
+export function projectAuthalicCornerWarp(flatPt: ArrayVector3D, baseFaceIndex: number): ArrayVector3D {
+  if (baseFaceIndex < 0 || baseFaceIndex > 3 || !Number.isInteger(baseFaceIndex)) {
+    throw new Error("Base face index must be an integer between 0 and 3");
+  }
+
+  const faceIdx = baseFaceIndex;
   const A = BASE_FACES[faceIdx][0];
   const B = BASE_FACES[faceIdx][1];
   const C = BASE_FACES[faceIdx][2];
@@ -687,20 +970,9 @@ export function projectAuthalicCornerWarp(
   const v = Math.max(0.0, Math.min(1.0, bary[1]));
   const w = Math.max(0.0, Math.min(1.0, bary[2]));
 
-  let fu: number, fv: number, fw: number;
-  if (warpFactor === 1.0) {
-    fu = authalicWarpG(u);
-    fv = authalicWarpG(v);
-    fw = authalicWarpG(w);
-  } else {
-    const gamma = warpFactor * 0.75;
-    const uc = u - 1.0 / 3.0;
-    const vc = v - 1.0 / 3.0;
-    const wc = w - 1.0 / 3.0;
-    fu = Math.pow(Math.max(1e-7, u), gamma) * (1.0 - 0.5 * uc + 0.35 * uc * uc + 0.3 * uc * uc * uc);
-    fv = Math.pow(Math.max(1e-7, v), gamma) * (1.0 - 0.5 * vc + 0.35 * vc * vc + 0.3 * vc * vc * vc);
-    fw = Math.pow(Math.max(1e-7, w), gamma) * (1.0 - 0.5 * wc + 0.35 * wc * wc + 0.3 * wc * wc * wc);
-  }
+  const fu = authalicWarpG(u);
+  const fv = authalicWarpG(v);
+  const fw = authalicWarpG(w);
 
   const sum = fu + fv + fw;
   if (sum <= 1e-9) {
@@ -717,6 +989,10 @@ export function projectAuthalicCornerWarp(
 
 /**
  * Gets the 3D vertices of the T4 cell normalized to the sphere surface of radiusKm.
+ * @param id The T4 ID of the cell.
+ * @param radiusKm The radius of the sphere in kilometers.
+ * @param options Optional T4 options.
+ * @returns An array containing the three 3D vertices of the cell.
  */
 export function getT4Vertices3D(
   id: bigint,
@@ -726,12 +1002,11 @@ export function getT4Vertices3D(
   const baseFace = Number((id >> 62n) & 3n);
   const [A, B, C] = getT4VerticesFlat(id);
   const authalic = options?.authalicWarp ?? true;
-  const warpFactor = options?.warpFactor ?? 1.0;
 
   if (authalic) {
-    const pA = projectAuthalicCornerWarp(A, baseFace, warpFactor);
-    const pB = projectAuthalicCornerWarp(B, baseFace, warpFactor);
-    const pC = projectAuthalicCornerWarp(C, baseFace, warpFactor);
+    const pA = projectAuthalicCornerWarp(A, baseFace);
+    const pB = projectAuthalicCornerWarp(B, baseFace);
+    const pC = projectAuthalicCornerWarp(C, baseFace);
     return [
       [pA[0] * radiusKm, pA[1] * radiusKm, pA[2] * radiusKm],
       [pB[0] * radiusKm, pB[1] * radiusKm, pB[2] * radiusKm],
@@ -751,6 +1026,10 @@ export function getT4Vertices3D(
 
 /**
  * Gets the center point of the T4 cell on the sphere surface of radiusKm.
+ * @param id The T4 ID of the cell.
+ * @param radiusKm The radius of the sphere in kilometers.
+ * @param options Optional T4 options.
+ * @returns The center point of the cell.
  */
 export function getT4Center3D(id: bigint, radiusKm = DEFAULT_RADIUS_KM, options?: T4Options): ArrayVector3D {
   const baseFace = Number((id >> 62n) & 3n);
@@ -761,10 +1040,9 @@ export function getT4Center3D(id: bigint, radiusKm = DEFAULT_RADIUS_KM, options?
     (A[2] + B[2] + C[2]) / 3.0,
   ];
   const authalic = options?.authalicWarp ?? true;
-  const warpFactor = options?.warpFactor ?? 1.0;
 
   if (authalic) {
-    const pCenter = projectAuthalicCornerWarp(centerFlat, baseFace, warpFactor);
+    const pCenter = projectAuthalicCornerWarp(centerFlat, baseFace);
     return [pCenter[0] * radiusKm, pCenter[1] * radiusKm, pCenter[2] * radiusKm];
   }
 
@@ -774,6 +1052,9 @@ export function getT4Center3D(id: bigint, radiusKm = DEFAULT_RADIUS_KM, options?
 
 /**
  * Gets the 2D GPS vertices of the T4 cell in [lng, lat] degrees.
+ * @param id The T4 ID of the cell.
+ * @param options Optional T4 options or boolean for applyEarthCurvature.
+ * @returns An array containing the three 2D vertices of the cell.
  */
 export function getT4Vertices(
   id: bigint,
@@ -781,14 +1062,13 @@ export function getT4Vertices(
 ): [ArrayVector2D, ArrayVector2D, ArrayVector2D] {
   const applyEarthCurvature = typeof options === "boolean" ? options : (options?.applyEarthCurvature ?? true);
   const authalic = typeof options === "boolean" ? true : (options?.authalicWarp ?? true);
-  const warpFactor = typeof options === "boolean" ? 1.0 : (options?.warpFactor ?? 1.0);
   const baseFace = Number((id >> 62n) & 3n);
 
   const [A, B, C] = getT4VerticesFlat(id);
 
-  const pA = authalic ? projectAuthalicCornerWarp(A, baseFace, warpFactor) : normalize3D(A);
-  const pB = authalic ? projectAuthalicCornerWarp(B, baseFace, warpFactor) : normalize3D(B);
-  const pC = authalic ? projectAuthalicCornerWarp(C, baseFace, warpFactor) : normalize3D(C);
+  const pA = authalic ? projectAuthalicCornerWarp(A, baseFace) : normalize3D(A);
+  const pB = authalic ? projectAuthalicCornerWarp(B, baseFace) : normalize3D(B);
+  const pC = authalic ? projectAuthalicCornerWarp(C, baseFace) : normalize3D(C);
 
   return [
     geocentricToGeodetic(pA, applyEarthCurvature),
@@ -796,8 +1076,6 @@ export function getT4Vertices(
     geocentricToGeodetic(pC, applyEarthCurvature),
   ];
 }
-
-export const getT4Vertices2D = getT4Vertices;
 
 /**
  * Gets the 2D GPS center coordinate of the T4 cell in [lng, lat] degrees.
@@ -808,46 +1086,78 @@ export function getT4Center(id: bigint, options?: T4Options | boolean): ArrayVec
   return geocentricToGeodetic(center3D, applyEarthCurvature);
 }
 
-export const getT4Center2D = getT4Center;
-
 // --- Face Selection & Cartesian to T4 ---
 
-function findBestFace(px: number, py: number, pz: number): { face: number; u: number; v: number; w: number } {
+interface FaceFindResult {
+  face: number;
+  u: number;
+  v: number;
+  w: number;
+}
+
+const FACE_FIND_RESULT: FaceFindResult = { face: 0, u: 0, v: 0, w: 0 };
+
+/**
+ * Finds the face that contains the given point and the barycentric coordinates of the point on that face.
+ * @param px The x-coordinate of the point.
+ * @param py The y-coordinate of the point.
+ * @param pz The z-coordinate of the point.
+ * @returns The face index and barycentric coordinates of the point.
+ * @throws Error if the point could not be projected onto the tetrahedron.
+ */
+function findBestFace(px: number, py: number, pz: number): FaceFindResult {
   // Outward face normals dot products: -v3, -v1, -v2, -v0
-  const d0 = px * sqrt2_9 + py * sqrt2_3 + pz * (1.0 / 3.0);
-  const d1 = -px * sqrt8_9 + pz * (1.0 / 3.0);
-  const d2 = px * sqrt2_9 - py * sqrt2_3 + pz * (1.0 / 3.0);
+  const d0 = px * SQRT2_9 + py * SQRT2_3 + pz * (1.0 / 3.0);
+  const d1 = -px * SQRT8_9 + pz * (1.0 / 3.0);
+  const d2 = px * SQRT2_9 - py * SQRT2_3 + pz * (1.0 / 3.0);
   const d3 = -pz;
 
   let bestFace = 0;
   let maxD = d0;
-  if (d1 > maxD) {
+  if (d1 > maxD + EPSILON12) {
     maxD = d1;
     bestFace = 1;
   }
-  if (d2 > maxD) {
+  if (d2 > maxD + EPSILON12) {
     maxD = d2;
     bestFace = 2;
   }
-  if (d3 > maxD) {
+  if (d3 > maxD + EPSILON12) {
     maxD = d3;
     bestFace = 3;
   }
 
-  const hitRes = getRayFaceIntersectionFast(px, py, pz, bestFace);
-  if (hitRes.hit) {
-    const bary = getBarycentricFast(hitRes.x, hitRes.y, hitRes.z, bestFace);
-    if (bary[0] >= -1e-4 && bary[1] >= -1e-4 && bary[2] >= -1e-4) {
-      let u = Math.max(0.0, bary[0]);
-      let v = Math.max(0.0, bary[1]);
-      let w = Math.max(0.0, bary[2]);
-      const s = u + v + w;
+  const fd = BASE_FACE_DATA[bestFace];
+  const denom = px * fd.nx + py * fd.ny + pz * fd.nz;
+  if (denom > EPSILON12) {
+    const t = fd.D / denom;
+    const qx = px * t;
+    const qy = py * t;
+    const qz = pz * t;
+    const v2x = qx - fd.Ax;
+    const v2y = qy - fd.Ay;
+    const v2z = qz - fd.Az;
+    const d20 = v2x * fd.v0x + v2y * fd.v0y + v2z * fd.v0z;
+    const d21 = v2x * fd.v1x + v2y * fd.v1y + v2z * fd.v1z;
+    const v = (fd.d11 * d20 - fd.d01 * d21) * fd.invDenom;
+    const w = (fd.d00 * d21 - fd.d01 * d20) * fd.invDenom;
+    const u = 1.0 - v - w;
+
+    if (u >= -1e-4 && v >= -1e-4 && w >= -1e-4) {
+      let cu = u > 0.0 ? u : 0.0;
+      let cv = v > 0.0 ? v : 0.0;
+      let cw = w > 0.0 ? w : 0.0;
+      const s = cu + cv + cw;
       if (s > 1e-9) {
-        u /= s;
-        v /= s;
-        w /= s;
+        cu /= s;
+        cv /= s;
+        cw /= s;
       }
-      return { face: bestFace, u, v, w };
+      FACE_FIND_RESULT.face = bestFace;
+      FACE_FIND_RESULT.u = cu;
+      FACE_FIND_RESULT.v = cv;
+      FACE_FIND_RESULT.w = cw;
+      return FACE_FIND_RESULT;
     }
   }
 
@@ -859,34 +1169,66 @@ function findBestFace(px: number, py: number, pz: number): { face: number; u: nu
     bestW = 0.0;
 
   for (let i = 0; i < 4; ++i) {
-    const fHit = getRayFaceIntersectionFast(px, py, pz, i);
-    if (!fHit.hit) continue;
+    const fdi = BASE_FACE_DATA[i];
+    const denomi = px * fdi.nx + py * fdi.ny + pz * fdi.nz;
+    if (denomi <= EPSILON12) continue;
 
-    const bary = getBarycentricFast(fHit.x, fHit.y, fHit.z, i);
-    const score = Math.min(bary[0], bary[1], bary[2]);
+    const ti = fdi.D / denomi;
+    const qx = px * ti;
+    const qy = py * ti;
+    const qz = pz * ti;
+    const v2x = qx - fdi.Ax;
+    const v2y = qy - fdi.Ay;
+    const v2z = qz - fdi.Az;
+    const d20 = v2x * fdi.v0x + v2y * fdi.v0y + v2z * fdi.v0z;
+    const d21 = v2x * fdi.v1x + v2y * fdi.v1y + v2z * fdi.v1z;
+    const v = (fdi.d11 * d20 - fdi.d01 * d21) * fdi.invDenom;
+    const w = (fdi.d00 * d21 - fdi.d01 * d20) * fdi.invDenom;
+    const u = 1.0 - v - w;
+
+    const score = Math.min(u, v, w);
     if (score >= 0.0) {
-      return { face: i, u: bary[0], v: bary[1], w: bary[2] };
+      FACE_FIND_RESULT.face = i;
+      FACE_FIND_RESULT.u = u;
+      FACE_FIND_RESULT.v = v;
+      FACE_FIND_RESULT.w = w;
+      return FACE_FIND_RESULT;
     }
-    if (score > bestScore) {
+    if (score > bestScore + EPSILON12) {
       bestScore = score;
       fallbackFace = i;
-      bestU = bary[0];
-      bestV = bary[1];
-      bestW = bary[2];
+      bestU = u;
+      bestV = v;
+      bestW = w;
     }
   }
 
   if (fallbackFace === -1) {
     throw new Error("Point could not be projected onto the tetrahedron");
   }
-  return { face: fallbackFace, u: bestU, v: bestV, w: bestW };
+
+  FACE_FIND_RESULT.face = fallbackFace;
+  FACE_FIND_RESULT.u = bestU;
+  FACE_FIND_RESULT.v = bestV;
+  FACE_FIND_RESULT.w = bestW;
+  return FACE_FIND_RESULT;
 }
 
 /**
  * Projects a geocentric unit vector P onto the tetrahedron and maps it to a T4 ID.
+ * @param P The geocentric unit vector to project.
+ * @param zoom The zoom level.
+ * @param options Optional T4 options.
+ * @returns The T4 ID of the cell.
+ * @throws Error if the vector is invalid or zoom is out of range.
  */
 export function cartesianToT4(P: ArrayVector3D, zoom: number, options?: T4Options): bigint {
-  if (zoom < 0 || zoom > 28) throw new Error("Zoom must be between 0 and 28");
+  if (!P || P.length < 3 || !Number.isFinite(P[0]) || !Number.isFinite(P[1]) || !Number.isFinite(P[2])) {
+    throw new Error("Invalid 3D vector");
+  }
+  if (zoom < 0 || zoom > 28 || !Number.isInteger(zoom)) {
+    throw new Error("Zoom must be an integer between 0 and 28");
+  }
 
   const best = findBestFace(P[0], P[1], P[2]);
   const authalic = options?.authalicWarp ?? true;
@@ -906,17 +1248,17 @@ export function cartesianToT4(P: ArrayVector3D, zoom: number, options?: T4Option
 
   for (let step = 0; step < zoom; ++step) {
     let s: number;
-    if (u > 0.5) {
+    if (u >= 0.5) {
       s = 0;
       u = 2.0 * u - 1.0;
       v = 2.0 * v;
       w = 2.0 * w;
-    } else if (v > 0.5) {
+    } else if (v >= 0.5) {
       s = 1;
       u = 2.0 * u;
       v = 2.0 * v - 1.0;
       w = 2.0 * w;
-    } else if (w > 0.5) {
+    } else if (w >= 0.5) {
       s = 2;
       u = 2.0 * u;
       v = 2.0 * v;
@@ -937,12 +1279,104 @@ export function cartesianToT4(P: ArrayVector3D, zoom: number, options?: T4Option
 }
 
 /**
- * Converts GPS [lat, lng] degrees to a T4 ID.
+ * Converts GPS coordinates (latitude, longitude in degrees) to a T4 ID.
+ *
+ * @param lat Latitude in degrees [-90, 90]
+ * @param lng Longitude in degrees [-180, 180]
+ * @param zoom Zoom level [0, 28]
+ * @param options Optional T4 configuration
+ * @returns The T4 ID of the cell.
+ * @throws Error if the latitude or longitude is invalid or zoom is out of range.
  */
 export function latLngToT4(lat: number, lng: number, zoom: number, options?: T4Options): bigint {
-  const applyEarthCurvature = options?.applyEarthCurvature ?? true;
-  const P = geodeticToGeocentric([lng, lat], applyEarthCurvature);
-  return cartesianToT4(P, zoom, options);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+    throw new Error("Latitude must be a valid number between -90 and 90 degrees");
+  }
+  if (!Number.isFinite(lng)) {
+    throw new Error("Longitude must be a valid number");
+  }
+  if (zoom < 0 || zoom > 28 || !Number.isInteger(zoom)) {
+    throw new Error("Zoom must be an integer between 0 and 28");
+  }
+
+  let px: number, py: number, pz: number;
+  if (lat >= 90.0) {
+    px = 0.0;
+    py = 0.0;
+    pz = 1.0;
+  } else if (lat <= -90.0) {
+    px = 0.0;
+    py = 0.0;
+    pz = -1.0;
+  } else {
+    const applyEarthCurvature = options?.applyEarthCurvature ?? true;
+    const lngRad = (lng * Math.PI) / 180.0;
+    const latRad = (lat * Math.PI) / 180.0;
+    const latGeocentric = applyEarthCurvature ? Math.atan2(INV_K * Math.sin(latRad), Math.cos(latRad)) : latRad;
+    const cosLat = Math.cos(latGeocentric);
+    px = cosLat * Math.cos(lngRad);
+    py = cosLat * Math.sin(lngRad);
+    pz = Math.sin(latGeocentric);
+  }
+
+  const best = findBestFace(px, py, pz);
+  const authalic = options?.authalicWarp ?? true;
+
+  let u = best.u;
+  let v = best.v;
+  let w = best.w;
+
+  if (authalic) {
+    const unwarped = unwarpAuthalicCornerInternal(u, v, w);
+    u = unwarped[0];
+    v = unwarped[1];
+    w = unwarped[2];
+  }
+
+  let subId = 0n;
+  for (let step = 0; step < zoom; ++step) {
+    let s: number;
+    if (u >= 0.5) {
+      s = 0;
+      u = 2.0 * u - 1.0;
+      v = 2.0 * v;
+      w = 2.0 * w;
+    } else if (v >= 0.5) {
+      s = 1;
+      u = 2.0 * u;
+      v = 2.0 * v - 1.0;
+      w = 2.0 * w;
+    } else if (w >= 0.5) {
+      s = 2;
+      u = 2.0 * u;
+      v = 2.0 * v;
+      w = 2.0 * w - 1.0;
+    } else {
+      s = 3;
+      u = 1.0 - 2.0 * u;
+      v = 1.0 - 2.0 * v;
+      w = 1.0 - 2.0 * w;
+    }
+    subId |= BIGINT_SUBS[s] << SUB_SHIFTS[step];
+  }
+
+  return BIGINT_FACES[best.face] | subId | VALID_FLAG | ZOOM_BIGINTS[zoom];
+}
+
+/**
+ * Converts a 2D GPS coordinate vector [lng, lat] (GeoJSON [x, y] convention) to a T4 ID.
+ *
+ * @param lngLat 2D array vector [longitude, latitude] in degrees
+ * @param zoom Zoom level [0, 28]
+ * @param options Optional T4 configuration
+ * @returns The T4 ID of the cell.
+ * @throws Error if the latitude or longitude is invalid or zoom is out of range.
+ */
+export function lngLatToT4(lngLat: ArrayVector2D, zoom: number, options?: T4Options): bigint {
+  if (!lngLat || lngLat.length < 2) {
+    throw new Error("Invalid 2D coordinate array: expected [lng, lat]");
+  }
+  return latLngToT4(lngLat[1], lngLat[0], zoom, options);
 }
 
 // --- Topology & Neighbors via Discrete Triangular Coordinates (TriCoord) ---
@@ -954,6 +1388,14 @@ interface TriCoord {
   up: number;
 }
 
+const TRI_COORD_RESULT: TriCoord = { i: 0, j: 0, k: 0, up: 1 };
+
+/**
+ * Converts a T4 ID to triangular coordinates.
+ * @param id The T4 ID of the cell.
+ * @param zoom The zoom level.
+ * @returns The triangular coordinates of the cell.
+ */
 function t4IdToTriCoord(id: bigint, zoom: number): TriCoord {
   let i = 0;
   let j = 0;
@@ -976,7 +1418,6 @@ function t4IdToTriCoord(id: bigint, zoom: number): TriCoord {
         j = j << 1;
         k = (k << 1) | 1;
       } else {
-        // s === 3
         i = i << 1;
         j = j << 1;
         k = k << 1;
@@ -996,7 +1437,6 @@ function t4IdToTriCoord(id: bigint, zoom: number): TriCoord {
         j = (j << 1) | 1;
         k = k << 1;
       } else {
-        // s === 3
         i = (i << 1) | 1;
         j = (j << 1) | 1;
         k = (k << 1) | 1;
@@ -1005,9 +1445,22 @@ function t4IdToTriCoord(id: bigint, zoom: number): TriCoord {
     }
   }
 
-  return { i, j, k, up };
+  TRI_COORD_RESULT.i = i;
+  TRI_COORD_RESULT.j = j;
+  TRI_COORD_RESULT.k = k;
+  TRI_COORD_RESULT.up = up;
+  return TRI_COORD_RESULT;
 }
 
+/**
+ * Converts triangular coordinates to a T4 ID.
+ * @param baseFace The base face of the tetrahedron.
+ * @param tcI The i coordinate.
+ * @param tcJ The j coordinate.
+ * @param tcK The k coordinate.
+ * @param zoom The zoom level.
+ * @returns The T4 ID of the cell.
+ */
 function triCoordToT4Id(baseFace: number, tcI: number, tcJ: number, tcK: number, zoom: number): bigint {
   let subId = 0n;
   let up = 1;
@@ -1099,17 +1552,19 @@ const BASE_FACE_ADJACENCY: BoundaryMapping[][] = [
 
 /**
  * Gets the 3 neighbor T4 IDs sharing the edges of the cell using discrete TriCoord arithmetic.
+ * @param id The T4 ID of the cell.
+ * @returns An array containing the three neighbor T4 IDs.
+ * @throws Error if the T4 ID is invalid.
  */
-export function getT4Neighbors(id: bigint, _options?: T4Options): [bigint, bigint, bigint] {
+export function getT4Neighbors(id: bigint): [bigint, bigint, bigint] {
+  if (typeof id !== "bigint" || id < 0n || id >> 64n !== 0n) {
+    throw new Error("Invalid T4 ID");
+  }
+
   const zoom = Number(id & 0x1fn);
-  if (((id >> 5n) & 1n) !== 1n || zoom > 28 || zoom < 0) {
+  if (((id >> 5n) & 1n) !== 1n || zoom > 28 || (id & UNUSED_MASKS[zoom]) !== 0n) {
     throw new Error("Invalid T4 ID");
   }
-
-  if ((id & UNUSED_MASKS[zoom]) !== 0n) {
-    throw new Error("Invalid T4 ID");
-  }
-
   const baseFace = Number((id >> 62n) & 3n);
   const tc = t4IdToTriCoord(id, zoom);
 
@@ -1165,23 +1620,29 @@ export function getT4Neighbors(id: bigint, _options?: T4Options): [bigint, bigin
 
 /**
  * Calculates the spherical surface area of the cell in square kilometers ($km^2$).
+ * @param id The T4 ID of the cell.
+ * @param options Optional T4 options.
+ * @returns The surface area of the cell in square kilometers.
+ * @throws Error if the T4 ID is invalid.
  */
-export function getT4CellArea(id: bigint, radiusKm = DEFAULT_RADIUS_KM): number {
+export function getT4CellArea(id: bigint, options?: T4Options): number {
+  if (typeof id !== "bigint" || id < 0n || id >> 64n !== 0n) {
+    throw new Error("Invalid T4 ID");
+  }
+
   const zoom = Number(id & 0x1fn);
-  if (((id >> 5n) & 1n) !== 1n || zoom > 28 || zoom < 0) {
+  if (((id >> 5n) & 1n) !== 1n || zoom > 28 || (id & UNUSED_MASKS[zoom]) !== 0n) {
     throw new Error("Invalid T4 ID");
   }
 
-  if ((id & UNUSED_MASKS[zoom]) !== 0n) {
-    throw new Error("Invalid T4 ID");
-  }
-
-  const baseFace = Number((id >> 62n) & 3n);
   const [A, B, C] = getT4VerticesFlat(id);
+  const radiusKm = options?.radiusKm ?? DEFAULT_RADIUS_KM;
+  const authalic = options?.authalicWarp ?? true;
+  const baseFace = authalic ? Number((id >> 62n) & 3n) : 0;
 
-  const uA = projectAuthalicCornerWarp(A, baseFace);
-  const uB = projectAuthalicCornerWarp(B, baseFace);
-  const uC = projectAuthalicCornerWarp(C, baseFace);
+  const uA = authalic ? projectAuthalicCornerWarp(A, baseFace) : normalize3D(A);
+  const uB = authalic ? projectAuthalicCornerWarp(B, baseFace) : normalize3D(B);
+  const uC = authalic ? projectAuthalicCornerWarp(C, baseFace) : normalize3D(C);
 
   const nABx = uA[1] * uB[2] - uA[2] * uB[1];
   const nABy = uA[2] * uB[0] - uA[0] * uB[2];
@@ -1199,7 +1660,7 @@ export function getT4CellArea(id: bigint, radiusKm = DEFAULT_RADIUS_KM): number 
   const lenBC = Math.hypot(nBCx, nBCy, nBCz);
   const lenCA = Math.hypot(nCAx, nCAy, nCAz);
 
-  if (lenAB < 1e-12 || lenBC < 1e-12 || lenCA < 1e-12) {
+  if (lenAB < EPSILON12 || lenBC < EPSILON12 || lenCA < EPSILON12) {
     const d1x = uB[0] - uA[0],
       d1y = uB[1] - uA[1],
       d1z = uB[2] - uA[2];
@@ -1232,7 +1693,7 @@ export function getT4CellArea(id: bigint, radiusKm = DEFAULT_RADIUS_KM): number 
   const gamma = Math.acos(cosGamma);
 
   const sphericalExcess = alpha + beta + gamma - Math.PI;
-  if (sphericalExcess <= 1e-12) {
+  if (sphericalExcess <= EPSILON12) {
     const d1x = uB[0] - uA[0],
       d1y = uB[1] - uA[1],
       d1z = uB[2] - uA[2];
@@ -1253,29 +1714,34 @@ export function getT4CellArea(id: bigint, radiusKm = DEFAULT_RADIUS_KM): number 
 
 /**
  * Standard OOP wrapper and memoized factory for T4 cells.
+ * This function creates a T4 cell object from a T4 ID or configuration.
+ * @param idOrPath The T4 ID or configuration.
+ * @param options Optional T4 options.
+ * @returns A T4 cell object.
+ * @throws Error if the configuration is invalid.
  */
-export function createT4(
-  idOrConfig: bigint | number[] | { baseFace: number; subdivisions?: number[]; zoom?: number },
-  options?: T4Options,
-): T4Object {
+export function createT4(idOrPath: bigint | number[], options?: T4Options): T4Cell {
   const radiusKm = options?.radiusKm ?? DEFAULT_RADIUS_KM;
   const applyEarthCurvature = options?.applyEarthCurvature ?? true;
   const authalicWarp = options?.authalicWarp ?? true;
-  const warpFactor = options?.warpFactor ?? 1.0;
 
   let id: bigint;
-  if (typeof idOrConfig === "bigint") {
-    id = idOrConfig;
-  } else if (Array.isArray(idOrConfig)) {
-    id = createT4Id(idOrConfig);
+  if (typeof idOrPath === "bigint") {
+    id = idOrPath;
+  } else if (Array.isArray(idOrPath)) {
+    id = createT4Id(idOrPath);
   } else {
-    const baseFace = idOrConfig.baseFace;
-    const subdivisions = idOrConfig.subdivisions ?? [];
-    id = createT4Id(baseFace, ...subdivisions);
+    throw new Error("Invalid T4 ID or path");
   }
 
-  const key = cacheKeyFor(id, radiusKm, applyEarthCurvature, authalicWarp, warpFactor);
-  const cachedRef = instanceCache.get(key);
+  const optKey = getOptionsKey(radiusKm, applyEarthCurvature, authalicWarp);
+  let subMap = optionsCache.get(optKey);
+  if (!subMap) {
+    subMap = new Map<bigint, WeakRef<T4Cell>>();
+    optionsCache.set(optKey, subMap);
+  }
+
+  const cachedRef = subMap.get(id);
   if (cachedRef) {
     const cached = cachedRef.deref();
     if (cached) return cached;
@@ -1286,7 +1752,7 @@ export function createT4(
     throw new Error("Invalid T4 ID");
   }
 
-  const obj: T4Object = {
+  const obj: T4Cell = {
     get id() {
       return id;
     },
@@ -1302,15 +1768,11 @@ export function createT4(
     get authalicWarp() {
       return authalicWarp;
     },
-    get warpFactor() {
-      return warpFactor;
-    },
     get vertices3D() {
       return getT4Vertices3D(id, radiusKm, {
         radiusKm,
         applyEarthCurvature,
         authalicWarp,
-        warpFactor,
       });
     },
     get center3D() {
@@ -1318,7 +1780,6 @@ export function createT4(
         radiusKm,
         applyEarthCurvature,
         authalicWarp,
-        warpFactor,
       });
     },
     get vertices() {
@@ -1326,7 +1787,6 @@ export function createT4(
         radiusKm,
         applyEarthCurvature,
         authalicWarp,
-        warpFactor,
       });
     },
     get center() {
@@ -1334,7 +1794,6 @@ export function createT4(
         radiusKm,
         applyEarthCurvature,
         authalicWarp,
-        warpFactor,
       });
     },
     get vertices2D() {
@@ -1344,7 +1803,11 @@ export function createT4(
       return this.center;
     },
     get area() {
-      return getT4CellArea(id, radiusKm);
+      return getT4CellArea(id, {
+        radiusKm,
+        applyEarthCurvature,
+        authalicWarp,
+      });
     },
     get parent() {
       const parentId = getParentT4Id(id);
@@ -1353,79 +1816,63 @@ export function createT4(
         radiusKm,
         applyEarthCurvature,
         authalicWarp,
-        warpFactor,
       });
     },
-    get neighbors(): [T4Object, T4Object, T4Object] {
-      const neighborIds = getT4Neighbors(id, {
-        radiusKm,
-        applyEarthCurvature,
-        authalicWarp,
-        warpFactor,
-      });
+    get neighbors(): [T4Cell, T4Cell, T4Cell] {
+      const neighborIds = getT4Neighbors(id);
       return [
         createT4(neighborIds[0], {
           radiusKm,
           applyEarthCurvature,
           authalicWarp,
-          warpFactor,
         }),
         createT4(neighborIds[1], {
           radiusKm,
           applyEarthCurvature,
           authalicWarp,
-          warpFactor,
         }),
         createT4(neighborIds[2], {
           radiusKm,
           applyEarthCurvature,
           authalicWarp,
-          warpFactor,
         }),
       ];
     },
-    get children(): [T4Object, T4Object, T4Object, T4Object] {
+    get children(): [T4Cell, T4Cell, T4Cell, T4Cell] {
       const childIds = getT4Children(id);
       return [
         createT4(childIds[0], {
           radiusKm,
           applyEarthCurvature,
           authalicWarp,
-          warpFactor,
         }),
         createT4(childIds[1], {
           radiusKm,
           applyEarthCurvature,
           authalicWarp,
-          warpFactor,
         }),
         createT4(childIds[2], {
           radiusKm,
           applyEarthCurvature,
           authalicWarp,
-          warpFactor,
         }),
         createT4(childIds[3], {
           radiusKm,
           applyEarthCurvature,
           authalicWarp,
-          warpFactor,
         }),
       ];
-    },
-    getChildren(): [T4Object, T4Object, T4Object, T4Object] {
-      return this.children;
     },
     get childIds(): [bigint, bigint, bigint, bigint] {
       return getT4Children(id);
     },
-    isDescendantOf(parent: T4Object | bigint): boolean {
+    isDescendantOf(parent: T4Cell | bigint): boolean {
       const parentId = typeof parent === "bigint" ? parent : parent.id;
       return isT4Descendant(id, parentId);
     },
   };
 
-  instanceCache.set(key, new WeakRef(obj));
-  cacheFinalizer.register(obj, key);
+  subMap.set(id, new WeakRef(obj));
+  cacheFinalizer.register(obj, { optionsKey: optKey, id });
   return obj;
 }

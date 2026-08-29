@@ -1,7 +1,7 @@
 {
   "name": "@fimbul-works/t4",
   "description": "An ultra-lightweight hierarchical triangular global grid system (DGGS) mapped to the WGS84 ellipsoid. Fast bitwise spatial indexing with sub-decimeter accuracy at up to 29 zoom levels.",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "type": "module",
   "private": false,
   "license": "MIT",
@@ -67,7 +67,7 @@
     "test": "vitest",
     "sizes": "npx bundle-size",
     "benchmark": "tsx benchmark_t4.ts",
-    "benchmark:h3": "tsx benchmark_vs_h3.ts",
+    "benchmark:h3": "brotli -df t4_corpus.json.br && tsx benchmark_vs_h3.ts",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {

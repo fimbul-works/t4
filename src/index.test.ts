@@ -3,19 +3,39 @@ import {
   createT4Id,
   parseT4Id,
   getParentT4Id,
+  getT4Children,
   isValidT4Id,
   isT4Descendant,
   geocentricToGeodetic,
   geodeticToGeocentric,
   getT4Vertices,
   getT4Center,
+  getT4VerticesFlat,
+  getT4Vertices3D,
+  getT4Center3D,
   getT4CellArea,
   unwarpAuthalicCorner,
   latLngToT4,
+  lngLatToT4,
+  cartesianToT4,
+  projectAuthalicCornerWarp,
   getT4Neighbors,
   createT4,
+  getRecommendedT4Zoom,
+  TETRAHEDRA_V0,
+  TETRAHEDRA_V1,
+  TETRAHEDRA_V3,
+  TETRAHEDRA_V2,
+  DEFAULT_RADIUS_KM,
 } from "./index";
-import { magnitude3D } from "@fimbul-works/vec/3d";
+import { ArrayVector3D, magnitude3D } from "@fimbul-works/vec/3d";
+
+const TETRAHEDRON_VERTICES: [ArrayVector3D, ArrayVector3D, ArrayVector3D, ArrayVector3D] = [
+  TETRAHEDRA_V0,
+  TETRAHEDRA_V1,
+  TETRAHEDRA_V2,
+  TETRAHEDRA_V3,
+];
 
 describe("T4 Indexer", () => {
   describe("Bitwise Operations", () => {
@@ -297,10 +317,10 @@ describe("T4 Indexer", () => {
   describe("Spherical Cell Area", () => {
     it("should calculate valid area for zoom 0 face", () => {
       const id = createT4Id(0);
-      const area = getT4CellArea(id, 6371.0);
+      const area = getT4CellArea(id);
       // Total Earth sphere area = 4 * PI * R^2 ~ 510,064,472 km^2
       // Each base face of regular tetrahedron covers exactly 1/4 of the sphere = ~127,516,118 km^2
-      const totalEarthArea = 4 * Math.PI * 6371.0 * 6371.0;
+      const totalEarthArea = 4 * Math.PI * DEFAULT_RADIUS_KM * DEFAULT_RADIUS_KM;
       expect(area).toBeCloseTo(totalEarthArea / 4, -4);
     });
 
@@ -323,18 +343,124 @@ describe("T4 Indexer", () => {
       const a2 = getT4CellArea(id2);
       expect(a2).toBeLessThan(c0);
     });
+
+    it("should respect options (authalicWarp) in getT4CellArea", () => {
+      const id = createT4Id([0, 1, 2]);
+      const areaWarped = getT4CellArea(id, { authalicWarp: true });
+      const areaUnwarped = getT4CellArea(id, { authalicWarp: false });
+
+      expect(areaWarped).toBeGreaterThan(0);
+      expect(areaUnwarped).toBeGreaterThan(0);
+
+      // Warped vs unwarped yield slightly different corner area distributions
+      expect(areaWarped).not.toBe(areaUnwarped);
+
+      // T4Object.area matches getT4CellArea with the same options
+      const cellUnwarped = createT4(id, { authalicWarp: false });
+      expect(cellUnwarped.area).toBe(areaUnwarped);
+    });
+  });
+
+  describe("Coordinate Ordering & Helpers", () => {
+    it("lngLatToT4 produces identical ID to latLngToT4", () => {
+      const lat = 51.5074;
+      const lng = -0.1278;
+      const zoom = 10;
+
+      const idFromLatLng = latLngToT4(lat, lng, zoom);
+      const idFromLngLat = lngLatToT4([lng, lat], zoom);
+
+      expect(idFromLngLat).toBe(idFromLatLng);
+    });
+  });
+
+  describe("Unified Error Handling Conventions", () => {
+    it("getParentT4Id throws on invalid ID and returns null on zoom 0", () => {
+      expect(() => getParentT4Id(0n)).toThrow("Invalid T4 ID");
+      expect(() => getParentT4Id(999999n)).toThrow("Invalid T4 ID");
+      expect(() => getParentT4Id((1n << 5n) | 29n)).toThrow("Invalid T4 ID");
+
+      const zoom0 = createT4Id(1);
+      expect(getParentT4Id(zoom0)).toBeNull();
+
+      const zoom1 = createT4Id(1, 0);
+      expect(getParentT4Id(zoom1)).toBe(zoom0);
+    });
+
+    it("getT4Children throws on invalid ID and on max zoom (28)", () => {
+      expect(() => getT4Children(0n)).toThrow("Invalid T4 ID");
+      expect(() => getT4Children(999999n)).toThrow("Invalid T4 ID");
+
+      const zoom28 = createT4Id(0, ...Array(28).fill(0));
+      expect(() => getT4Children(zoom28)).toThrow("Cannot get children: max zoom level 28 reached");
+    });
+
+    it("getT4Neighbors throws on invalid ID", () => {
+      expect(() => getT4Neighbors(0n)).toThrow("Invalid T4 ID");
+      expect(() => getT4Neighbors(999999n)).toThrow("Invalid T4 ID");
+    });
+
+    it("getT4CellArea and geometry getters throw on invalid ID", () => {
+      expect(() => getT4CellArea(0n)).toThrow("Invalid T4 ID");
+      expect(() => getT4VerticesFlat(0n)).toThrow("Invalid T4 ID");
+      expect(() => getT4Vertices(0n)).toThrow("Invalid T4 ID");
+      expect(() => getT4Center(0n)).toThrow("Invalid T4 ID");
+      expect(() => getT4Vertices3D(0n)).toThrow("Invalid T4 ID");
+      expect(() => getT4Center3D(0n)).toThrow("Invalid T4 ID");
+    });
+
+    it("projectAuthalicCornerWarp throws on invalid base face index", () => {
+      expect(() => projectAuthalicCornerWarp([0, 0, 1], -1)).toThrow(
+        "Base face index must be an integer between 0 and 3",
+      );
+      expect(() => projectAuthalicCornerWarp([0, 0, 1], 4)).toThrow(
+        "Base face index must be an integer between 0 and 3",
+      );
+      expect(() => projectAuthalicCornerWarp([0, 0, 1], 1.5)).toThrow(
+        "Base face index must be an integer between 0 and 3",
+      );
+    });
+
+    it("latLngToT4 and cartesianToT4 throw on out-of-range coordinates and zoom", () => {
+      expect(() => latLngToT4(95, 0, 10)).toThrow("Latitude must be a valid number between -90 and 90 degrees");
+      expect(() => latLngToT4(-95, 0, 10)).toThrow("Latitude must be a valid number between -90 and 90 degrees");
+      expect(() => latLngToT4(NaN, 0, 10)).toThrow("Latitude must be a valid number between -90 and 90 degrees");
+      expect(() => latLngToT4(0, NaN, 10)).toThrow("Longitude must be a valid number");
+      expect(() => latLngToT4(0, 0, -1)).toThrow("Zoom must be an integer between 0 and 28");
+      expect(() => latLngToT4(0, 0, 29)).toThrow("Zoom must be an integer between 0 and 28");
+      expect(() => latLngToT4(0, 0, 2.5)).toThrow("Zoom must be an integer between 0 and 28");
+
+      expect(() => cartesianToT4([0, 0] as any, 10)).toThrow("Invalid 3D vector");
+      expect(() => cartesianToT4([0, 0, NaN], 10)).toThrow("Invalid 3D vector");
+      expect(() => cartesianToT4([0, 0, 1], 30)).toThrow("Zoom must be an integer between 0 and 28");
+
+      expect(() => lngLatToT4([0] as any, 10)).toThrow("Invalid 2D coordinate array: expected [lng, lat]");
+    });
   });
 
   describe("OOP Wrapper & Caching", () => {
     it("should memoize and retrieve objects from the WeakRef cache", () => {
-      const config = { baseFace: 1, subdivisions: [0, 3], zoom: 2 };
-      const t4_1 = createT4(config);
+      const t4_1 = createT4([1, 0, 3]);
       const t4_2 = createT4(t4_1.id);
 
       expect(t4_1).toBe(t4_2); // same object instance reference
       expect(t4_1.zoom).toBe(2);
       expect(t4_1.authalicWarp).toBe(true);
       expect(t4_1.area).toBeGreaterThan(0);
+    });
+
+    it("should isolate cache entries across different option configurations", () => {
+      const id = createT4Id([1, 0, 2]);
+      const defaultCell = createT4(id);
+      const noWarpCell = createT4(id, { authalicWarp: false });
+      const customRadiusCell = createT4(id, { radiusKm: 3390 });
+
+      expect(defaultCell).not.toBe(noWarpCell);
+      expect(defaultCell).not.toBe(customRadiusCell);
+
+      // Re-retrieval with matching options returns the exact cached instance
+      expect(createT4(id, { authalicWarp: false })).toBe(noWarpCell);
+      expect(createT4(id, { radiusKm: 3390 })).toBe(customRadiusCell);
     });
 
     it("should return parent, neighbors, and children as cached T4Objects", () => {
@@ -361,11 +487,134 @@ describe("T4 Indexer", () => {
         expect(c.isDescendantOf(t4)).toBe(true);
       });
 
-      const childrenMethod = t4.getChildren();
-      expect(childrenMethod).toEqual(children);
-
       const childIds = t4.childIds;
       expect(childIds).toEqual(children.map((c) => c.id));
+    });
+  });
+
+  describe("Geographic Singularities & Edge Cases", () => {
+    const edgeCases = [
+      { name: "Null Island", lat: 0.0, lng: 0.0 },
+      { name: "North Pole", lat: 90.0, lng: 0.0 },
+      { name: "South Pole", lat: -90.0, lng: 0.0 },
+      { name: "Date Line +180", lat: 0.0, lng: 180.0 },
+      { name: "Date Line -180", lat: 0.0, lng: -180.0 },
+      { name: "Equator 30E", lat: 0.0, lng: 30.0 },
+      { name: "Tetrahedron V0", lat: 90.0, lng: 0.0 },
+      { name: "Tetrahedron V1", lat: -19.592483225467202, lng: 0.0 },
+      { name: "Tetrahedron V2", lat: -19.592483225467202, lng: 120.0 },
+      { name: "Tetrahedron V3", lat: -19.592483225467202, lng: -120.0 },
+      { name: "Edge Midpoint V0-V1", lat: 35.446011426401625, lng: 0.0 },
+      { name: "Edge Midpoint V0-V2", lat: 35.446011426401625, lng: 120.0 },
+      { name: "Edge Midpoint V0-V3", lat: 35.446011426401625, lng: -120.0 },
+      { name: "Edge Midpoint V1-V2", lat: -35.446011426401625, lng: 60.0 },
+      { name: "Edge Midpoint V2-V3", lat: -35.446011426401625, lng: 180.0 },
+      { name: "Edge Midpoint V3-V1", lat: -35.446011426401625, lng: -60.0 },
+    ];
+
+    it("encodes and decodes every edge case across all zoom levels 0..28", () => {
+      for (const pt of edgeCases) {
+        for (let z = 0; z <= 28; z++) {
+          const id = latLngToT4(pt.lat, pt.lng, z);
+          expect(isValidT4Id(id)).toBe(true);
+
+          const parsed = parseT4Id(id);
+          expect(parsed.zoom).toBe(z);
+          expect(parsed.baseFace).toBeGreaterThanOrEqual(0);
+          expect(parsed.baseFace).toBeLessThanOrEqual(3);
+          expect(parsed.subdivisions).toHaveLength(z);
+
+          const center = getT4Center(id);
+          expect(Number.isFinite(center[0])).toBe(true);
+          expect(Number.isFinite(center[1])).toBe(true);
+
+          const vertices = getT4Vertices(id);
+          expect(vertices).toHaveLength(3);
+          for (const v of vertices) {
+            expect(Number.isFinite(v[0])).toBe(true);
+            expect(Number.isFinite(v[1])).toBe(true);
+          }
+        }
+      }
+    });
+
+    it("verifies spatial convergence: cell center approaches point as zoom increases", () => {
+      const pt = { lat: 35.4460114, lng: 120.0 }; // Edge midpoint
+      const initialDist = Math.hypot(
+        getT4Center(latLngToT4(pt.lat, pt.lng, 2))[1] - pt.lat,
+        getT4Center(latLngToT4(pt.lat, pt.lng, 2))[0] - pt.lng,
+      );
+      const fineDist = Math.hypot(
+        getT4Center(latLngToT4(pt.lat, pt.lng, 20))[1] - pt.lat,
+        getT4Center(latLngToT4(pt.lat, pt.lng, 20))[0] - pt.lng,
+      );
+      expect(fineDist).toBeLessThan(initialDist);
+    });
+  });
+
+  describe("Recommended Zoom Calculation", () => {
+    it("returns correct recommended zoom for integer and decimal coordinates", () => {
+      expect(getRecommendedT4Zoom(0, 0)).toBe(7);
+      expect(getRecommendedT4Zoom(60.1, 24.9)).toBe(11);
+      expect(getRecommendedT4Zoom(60.16, 24.93)).toBe(15);
+      expect(getRecommendedT4Zoom(60.1699, 24.9384)).toBe(21);
+      expect(getRecommendedT4Zoom(60.169901, 24.938401)).toBe(28);
+    });
+
+    it("supports vector [lng, lat], object {lat, lng}, and string signatures", () => {
+      expect(getRecommendedT4Zoom([24.9384, 60.1699])).toBe(21);
+      expect(getRecommendedT4Zoom({ lat: 60.1699, lng: 24.9384 })).toBe(21);
+      expect(getRecommendedT4Zoom({ latitude: 60.1699, longitude: 24.9384 })).toBe(21);
+      expect(getRecommendedT4Zoom("60.1699", "24.9384")).toBe(21);
+      expect(getRecommendedT4Zoom(60.32211921253667, 24.85535901559718)).toBe(28);
+    });
+
+    it("accounts for meridian convergence at high latitudes", () => {
+      // 4 decimal places in longitude at equator (~11.1m) -> zoom 20
+      const equatorZoom = getRecommendedT4Zoom(0.0, 0.0001);
+      // 4 decimal places in longitude at Arctic 80N (~1.9m) -> zoom 23 (higher zoom because meters are smaller)
+      const arcticZoom = getRecommendedT4Zoom(80.0, 0.0001);
+
+      expect(equatorZoom).toBe(20);
+      expect(arcticZoom).toBe(23);
+      expect(arcticZoom).toBeGreaterThan(equatorZoom);
+    });
+  });
+
+  describe("Tetrahedron Regularity & Zoom 28 Edge Precision", () => {
+    it("verifies regular tetrahedron symmetry: all 6 base edges are equal length within EPSILON", () => {
+      const [V0, V1, V2, V3] = TETRAHEDRON_VERTICES;
+      const edges = [
+        [V0, V1],
+        [V0, V2],
+        [V0, V3],
+        [V1, V2],
+        [V2, V3],
+        [V3, V1],
+      ];
+
+      const expectedChord = Math.sqrt(8 / 3);
+      const expectedAngle = Math.acos(-1 / 3);
+
+      for (const [a, b] of edges) {
+        const chord = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+        const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        const angle = Math.acos(dot);
+
+        expect(chord).toBeCloseTo(expectedChord, 10);
+        expect(angle).toBeCloseTo(expectedAngle, 10);
+      }
+
+      // Verify exact Zoom 28 edge lengths on Earth (R = 6371.0 km)
+      const earthRadiusM = DEFAULT_RADIUS_KM * 1000;
+      const rootChordM = expectedChord * earthRadiusM;
+      const rootArcM = expectedAngle * earthRadiusM;
+
+      const z28ChordCm = (rootChordM / 2 ** 28) * 100;
+      const z28ArcCm = (rootArcM / 2 ** 28) * 100;
+
+      expect(z28ChordCm).toBeCloseTo(3.8757, 3); // ~3.88 cm flat chord
+      expect(z28ArcCm).toBeCloseTo(4.5347, 3); // ~4.53 cm spherical geodesic arc
     });
   });
 });

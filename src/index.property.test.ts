@@ -141,7 +141,7 @@ describe("T4 Property & Edge-Case Tests", () => {
   });
 
   describe("Precision & determinism at extreme zoom", () => {
-    // 5. At z28 (~5.5cm cells on Earth), the center must still round-trip
+    // 5. At z28 (~3.88cm chord / ~4.53cm arc cells on Earth), the center must still round-trip
     //    back to the same cell id.
     it("center round-trip is stable at z28", () => {
       const lat = 60.1699;
@@ -265,7 +265,7 @@ describe("T4 Property & Edge-Case Tests", () => {
       let totalArea = 0;
       for (let face = 0; face < 4; face++) {
         const id = createT4Id(face);
-        totalArea += getT4CellArea(id, R);
+        totalArea += getT4CellArea(id);
       }
       expect(Math.abs(totalArea - expectedTotalArea) / expectedTotalArea).toBeLessThan(0.0001);
     });
